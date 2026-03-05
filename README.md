@@ -1,59 +1,89 @@
 # Agent Monitor
 
-OpenClaw Agent 实时状态监控 - 独立版
+实时监控 OpenClaw Agent 运行状态的可视化工具。
 
-从 LBP-Tools 中提取的 Agent 实时监控模块，作为独立项目运行。
+![Status](https://img.shields.io/badge/status-active-green)
+![Version](https://img.shields.io/badge/version-1.2-blue)
 
-## 功能
+## 功能特性
 
-- 🔴 实时监控所有 OpenClaw Agent 会话
-- 📊 显示 Agent 的工具调用、思考过程和回复
-- 🎨 按 Agent 区分的颜色标识
-- ⚡ 自动检测新 Agent 和新会话
-- 📱 响应式 Web 界面
+- 🔴 **实时监控** - 追踪所有 Agent 的会话活动
+- 📝 **活动记录** - 显示工具调用、思考过程、回复内容
+- 🎨 **多 Agent 支持** - 自动识别并区分不同 Agent
+- 📱 **响应式设计** - 适配桌面和移动设备
+- 🌙 **深色主题** - 护眼设计，适合长时间监控
+- ⚡ **自动刷新** - 1 秒间隔实时更新
+
+## 截图
+
+界面展示多个 Agent 的实时活动流，包括：
+- 工具调用（read/edit/exec/web_search 等）
+- 思考过程（thinking）
+- 最终回复（reply）
 
 ## 快速开始
 
+### 安装
+
 ```bash
-# 1. 进入项目目录
-cd ~/Developer/agent-monitor
+# 克隆项目
+git clone https://github.com/yichen2516-lbp/agent-monitor.git
+cd agent-monitor
 
-# 2. 安装依赖
+# 安装依赖
 npm install
-
-# 3. 启动服务
-npm start
-
-# 4. 访问 http://localhost:3450
 ```
+
+### 启动
+
+```bash
+npm start
+```
+
+服务将在 http://localhost:3450 启动。
 
 ## 配置
 
-默认配置：
-- 端口: `3450`
-- Agent 目录: `/Users/lbp/.openclaw/agents`
-- 刷新间隔: 3秒
+### 环境变量
 
-可以通过环境变量修改端口：
 ```bash
-PORT=8080 npm start
+# 设置 OpenClaw agents 目录
+export AGENTS_DIR=/path/to/.openclaw/agents
+
+# 设置端口
+export PORT=3450
+
+npm start
+```
+
+### 配置文件
+
+创建 `config.json`：
+
+```json
+{
+  "agentsDir": "/home/user/.openclaw/agents",
+  "maxActivities": 100,
+  "pollInterval": 10000,
+  "refreshInterval": 1000
+}
 ```
 
 ## API
 
-### 获取实时状态
+### 获取状态
 ```
 GET /api
 ```
 
-响应：
+响应示例：
 ```json
 {
-  "agents": ["LBP", "EDGE", "COOL", "TIM"],
+  "agents": ["main", "edge", "cool", "tim"],
   "activities": [
     {
       "type": "tool",
-      "agent": "LBP",
+      "agent": "main",
       "tool": "read",
       "description": "📄 read    /path/to/file.js",
       "timestamp": "2026-03-05T15:30:00.000Z"
@@ -68,22 +98,41 @@ GET /api
 GET /health
 ```
 
-## 与 LBP-Tools 的区别
-
-| 特性 | LBP-Tools 版 | 独立版 |
-|------|-------------|--------|
-| 依赖 | 需要 LBP-Tools 完整环境 | 仅依赖 express |
-| 启动 | 随 LBP-Tools 启动 | 独立启动 |
-| 端口 | 3000 (共享) | 3450 (独立) |
-| 功能 | 集成在 Tools 平台中 | 纯监控功能 |
-
 ## 技术栈
 
-- Node.js
-- Express
-- File System Watch API
-- 原生 JavaScript (前端)
+- **后端**: Node.js + Express
+- **前端**: 原生 JavaScript (无框架依赖)
+- **实时更新**: File System Watch API + 轮询
 
-## 许可证
+## 系统要求
+
+- Node.js ≥ 18
+- OpenClaw 安装（用于读取 agent 会话）
+
+## 跨平台
+
+### macOS
+```bash
+export AGENTS_DIR=/Users/username/.openclaw/agents
+npm start
+```
+
+### Linux
+```bash
+export AGENTS_DIR=/home/username/.openclaw/agents
+npm start
+```
+
+### Windows (PowerShell)
+```powershell
+$env:AGENTS_DIR="C:\Users\username\.openclaw\agents"
+npm start
+```
+
+## License
 
 MIT
+
+---
+
+Built with ⚡ for OpenClaw
