@@ -86,7 +86,8 @@ function getAllSessions() {
             name: f, 
             path: fullPath, 
             size: stats.size,
-            mtime: stats.mtime
+            mtime: stats.mtime,
+            source: 'session'
           };
         })
         .sort((a, b) => b.mtime - a.mtime);
@@ -100,6 +101,41 @@ function getAllSessions() {
   }
   
   return sessions;
+}
+
+// 获取所有 cron 运行记录文件
+function getCronRuns() {
+  const cronRuns = [];
+  const cronDir = path.join(os.homedir(), '.openclaw', 'cron', 'runs');
+  
+  try {
+    if (!fs.existsSync(cronDir)) {
+      return cronRuns;
+    }
+    
+    const files = fs.readdirSync(cronDir)
+      .filter(f => f.endsWith('.jsonl'))
+      .map(f => {
+        const fullPath = path.join(cronDir, f);
+        const stats = fs.statSync(fullPath);
+        return {
+          agent: 'cron',
+          name: f,
+          path: fullPath,
+          size: stats.size,
+          mtime: stats.mtime,
+          source: 'cron'
+        };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    
+    // 只取最新的5个cron文件（避免太多历史数据）
+    return files.slice(0, 5);
+  } catch (e) {
+    console.error('[Agent-Monitor] 读取 cron 目录失败:', e.message);
+  }
+  
+  return cronRuns;
 }
 
 // 解析单行活动
@@ -177,16 +213,58 @@ function parseActivityLine(line, agentName) {
   }
 }
 
+// 解析 cron 运行记录行
+function parseCronLine(line) {
+  try {
+    const data = JSON.parse(line);
+    if (!data.ts) return null;
+    
+    const timestamp = new Date(data.ts).toISOString();
+    const status = data.status || 'unknown';
+    const summary = data.summary || '';
+    const error = data.error || '';
+    const duration = data.durationMs ? `(${Math.round(data.durationMs / 1000)}s)` : '';
+    
+    // 从 sessionKey 中提取 agent 名称
+    let agentName = 'cron';
+    if (data.sessionKey) {
+      const match = data.sessionKey.match(/agent:([^:]+):/);
+      if (match) agentName = match[1];
+    }
+    
+    const statusEmoji = status === 'ok' ? '✅' : status === 'error' ? '❌' : '⏳';
+    const description = `${statusEmoji} cron ${duration} ${summary.slice(0, 100)}${summary.length > 100 ? '...' : ''}`;
+    
+    return [{
+      type: 'cron',
+      agent: agentName,
+      tool: 'cron',
+      description,
+      timestamp,
+      status,
+      fullSummary: summary,
+      error: error
+    }];
+  } catch (e) {
+    return null;
+  }
+}
+
 // 加载会话文件
 function loadSessionFile(sessionInfo) {
-  const { agent, path: filePath } = sessionInfo;
+  const { agent, path: filePath, source } = sessionInfo;
   
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const lines = content.split('\n').filter(l => l.trim());
     
     for (const line of lines) {
-      const activities = parseActivityLine(line, agent);
+      let activities;
+      if (source === 'cron') {
+        activities = parseCronLine(line);
+      } else {
+        activities = parseActivityLine(line, agent);
+      }
       if (activities) {
         recentActivities.push(...activities.map(a => ({ ...a, source: filePath })));
       }
@@ -196,7 +274,7 @@ function loadSessionFile(sessionInfo) {
       recentActivities = recentActivities.slice(-CONFIG.maxActivities);
     }
     
-    console.log(`[Agent-Monitor] 加载 ${agent}: ${path.basename(filePath)} (${lines.length} 行)`);
+    console.log(`[Agent-Monitor] 加载 ${source === 'cron' ? 'cron' : agent}: ${path.basename(filePath)} (${lines.length} 行)`);
     
     return fs.statSync(filePath).size;
   } catch (e) {
@@ -256,12 +334,18 @@ function watchSession(sessionInfo) {
 // 初始化所有 agent
 function init() {
   const sessions = getAllSessions();
+  const cronRuns = getCronRuns();
   
   for (const session of sessions) {
     watchSession(session);
   }
   
-  if (sessions.length === 0) {
+  // 加载 cron 数据（只加载，不监控文件变化）
+  for (const cronRun of cronRuns) {
+    loadSessionFile(cronRun);
+  }
+  
+  if (sessions.length === 0 && cronRuns.length === 0) {
     console.log('[Agent-Monitor] 未找到任何会话文件，等待中...');
   }
   
@@ -279,6 +363,12 @@ function init() {
         console.log(`[Agent-Monitor] ${session.agent} 新会话: ${session.name}`);
         watchSession(session);
       }
+    }
+    
+    // 定期刷新 cron 数据（每10秒检查一次）
+    const newCronRuns = getCronRuns();
+    for (const cronRun of newCronRuns) {
+      loadSessionFile(cronRun);
     }
   }, CONFIG.pollInterval);
 }
@@ -326,8 +416,8 @@ const HTML_PAGE = `<!DOCTYPE html>
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="Cache-Control" content="no-store">
-  <title>Agent Monitor v1.2 - OpenClaw 实时状态</title>
-  <!-- v1.2: fixed JS errors -->
+  <title>Agent Monitor v1.3 - OpenClaw 实时状态</title>
+  <!-- v1.3: added cron monitoring -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -399,6 +489,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     .activity-item.EDGE { border-left: 3px solid #f778ba; }
     .activity-item.COOL { border-left: 3px solid #f7931a; }
     .activity-item.TIM { border-left: 3px solid #8b949e; }
+    .activity-item.cron { border-left: 3px solid #8957e5; }
     
     .meta {
       display: flex;
@@ -422,6 +513,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     .agent-name.EDGE { background: #f778ba33; color: #f778ba; }
     .agent-name.COOL { background: #f7931a33; color: #f7931a; }
     .agent-name.TIM { background: #8b949e33; color: #8b949e; }
+    .agent-name.cron { background: #8957e533; color: #8957e5; }
     
     .description {
       color: #c9d1d9;
@@ -480,9 +572,11 @@ const HTML_PAGE = `<!DOCTYPE html>
     
     function createActivityItem(activity) {
       const div = document.createElement('div');
-      div.className = 'activity-item ' + (activity.agent || 'unknown');
+      const agentClass = (activity.agent || 'unknown').toUpperCase();
+      div.className = 'activity-item ' + agentClass;
       if (activity.type === 'thinking') div.classList.add('thinking');
       if (activity.type === 'reply') div.classList.add('reply');
+      if (activity.type === 'cron') div.classList.add('cron');
       
       const meta = document.createElement('div');
       meta.className = 'meta';
@@ -492,7 +586,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       time.textContent = formatTime(activity.timestamp);
       
       const agent = document.createElement('span');
-      agent.className = 'agent-name ' + (activity.agent || 'unknown');
+      agent.className = 'agent-name ' + agentClass;
       agent.textContent = activity.agent || '?';
       
       meta.appendChild(time);
