@@ -240,7 +240,7 @@ function parseCronLine(line) {
     }
 
     const statusEmoji = status === 'ok' ? '✅' : status === 'error' ? '❌' : '⏳';
-    const description = `${statusEmoji} ${duration} ${summary.slice(0, 100)}${summary.length > 100 ? '...' : ''}`;
+    const description = `${statusEmoji} ${duration} ${summary}`;
 
     return [{
       type: 'cron',
