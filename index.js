@@ -48,7 +48,7 @@ function getDefaultAgentsDir() {
 // 配置 (优先级: 环境变量 > 配置文件 > 默认)
 const CONFIG = {
   agentsDir: process.env.AGENTS_DIR || fileConfig.agentsDir || getDefaultAgentsDir(),
-  maxActivities: process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 100,
+  maxActivities: process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 300,
   pollInterval: process.env.POLL_INTERVAL || fileConfig.pollInterval || 10000,
   refreshInterval: process.env.REFRESH_INTERVAL || fileConfig.refreshInterval || 1000
 };
@@ -57,41 +57,42 @@ console.log('[Agent-Monitor] Agents 目录:', CONFIG.agentsDir);
 
 // 状态
 let recentActivities = [];
+let cronActivities = [];
 let activeSessions = new Map();
 
 // 获取所有 agent 的最新会话文件
 function getAllSessions() {
   const sessions = [];
-  
+
   try {
     if (!fs.existsSync(CONFIG.agentsDir)) {
       console.error('[Agent-Monitor] Agents 目录不存在:', CONFIG.agentsDir);
       return sessions;
     }
-    
+
     const agents = fs.readdirSync(CONFIG.agentsDir)
       .filter(name => !name.startsWith('.'));
-    
+
     for (const agent of agents) {
       const sessionsDir = path.join(CONFIG.agentsDir, agent, 'sessions');
       if (!fs.existsSync(sessionsDir)) continue;
-      
+
       const files = fs.readdirSync(sessionsDir)
         .filter(f => f.endsWith('.jsonl') && !f.includes('.deleted'))
         .map(f => {
           const fullPath = path.join(sessionsDir, f);
           const stats = fs.statSync(fullPath);
-          return { 
-            agent, 
-            name: f, 
-            path: fullPath, 
+          return {
+            agent,
+            name: f,
+            path: fullPath,
             size: stats.size,
             mtime: stats.mtime,
             source: 'session'
           };
         })
         .sort((a, b) => b.mtime - a.mtime);
-      
+
       if (files.length > 0) {
         sessions.push(files[0]);
       }
@@ -99,7 +100,7 @@ function getAllSessions() {
   } catch (e) {
     console.error('[Agent-Monitor] 读取失败:', e.message);
   }
-  
+
   return sessions;
 }
 
@@ -107,12 +108,12 @@ function getAllSessions() {
 function getCronRuns() {
   const cronRuns = [];
   const cronDir = path.join(os.homedir(), '.openclaw', 'cron', 'runs');
-  
+
   try {
     if (!fs.existsSync(cronDir)) {
       return cronRuns;
     }
-    
+
     const files = fs.readdirSync(cronDir)
       .filter(f => f.endsWith('.jsonl'))
       .map(f => {
@@ -128,13 +129,13 @@ function getCronRuns() {
         };
       })
       .sort((a, b) => b.mtime - a.mtime);
-    
+
     // 只取最新的5个cron文件（避免太多历史数据）
     return files.slice(0, 5);
   } catch (e) {
     console.error('[Agent-Monitor] 读取 cron 目录失败:', e.message);
   }
-  
+
   return cronRuns;
 }
 
@@ -143,20 +144,20 @@ function parseActivityLine(line, agentName) {
   try {
     const data = JSON.parse(line);
     if (!data.timestamp) return null;
-    
+
     const baseTimestamp = new Date(data.timestamp).getTime();
     const activities = [];
-    
+
     if (data.type === 'message' && data.message?.role === 'assistant') {
       const content = data.message.content || [];
-      
+
       content.forEach((item, index) => {
         const itemTimestamp = new Date(baseTimestamp + index * 10);
-        
+
         if (item.type === 'toolCall') {
           const toolName = item.name || 'unknown';
           const args = item.arguments || {};
-          
+
           let description = '';
           const toolMap = {
             'read': () => `📄 read    ${args.file_path || args.path || 'unknown'}`,
@@ -174,9 +175,9 @@ function parseActivityLine(line, agentName) {
             'process': () => `⚙️  process ${args.action || ''}`,
             'browser': () => `🌐 browser ${args.action || ''}`
           };
-          
+
           description = toolMap[toolName] ? toolMap[toolName]() : `⚙️  ${toolName}`;
-          
+
           activities.push({
             type: 'tool',
             agent: agentName,
@@ -185,7 +186,7 @@ function parseActivityLine(line, agentName) {
             timestamp: itemTimestamp.toISOString()
           });
         }
-        
+
         if (item.type === 'thinking') {
           activities.push({
             type: 'thinking',
@@ -194,7 +195,7 @@ function parseActivityLine(line, agentName) {
             timestamp: itemTimestamp.toISOString()
           });
         }
-        
+
         if (item.type === 'text' && item.text) {
           activities.push({
             type: 'reply',
@@ -206,7 +207,7 @@ function parseActivityLine(line, agentName) {
         }
       });
     }
-    
+
     return activities;
   } catch (e) {
     return null;
@@ -218,23 +219,23 @@ function parseCronLine(line) {
   try {
     const data = JSON.parse(line);
     if (!data.ts) return null;
-    
+
     const timestamp = new Date(data.ts).toISOString();
     const status = data.status || 'unknown';
     const summary = data.summary || '';
     const error = data.error || '';
     const duration = data.durationMs ? `(${Math.round(data.durationMs / 1000)}s)` : '';
-    
+
     // 从 sessionKey 中提取 agent 名称
     let agentName = 'cron';
     if (data.sessionKey) {
       const match = data.sessionKey.match(/agent:([^:]+):/);
       if (match) agentName = match[1];
     }
-    
+
     const statusEmoji = status === 'ok' ? '✅' : status === 'error' ? '❌' : '⏳';
     const description = `${statusEmoji} cron ${duration} ${summary.slice(0, 100)}${summary.length > 100 ? '...' : ''}`;
-    
+
     return [{
       type: 'cron',
       agent: agentName,
@@ -253,11 +254,11 @@ function parseCronLine(line) {
 // 加载会话文件
 function loadSessionFile(sessionInfo) {
   const { agent, path: filePath, source } = sessionInfo;
-  
+
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const lines = content.split('\n').filter(l => l.trim());
-    
+
     for (const line of lines) {
       let activities;
       if (source === 'cron') {
@@ -266,16 +267,24 @@ function loadSessionFile(sessionInfo) {
         activities = parseActivityLine(line, agent);
       }
       if (activities) {
-        recentActivities.push(...activities.map(a => ({ ...a, source: filePath })));
+        if (source === 'cron') {
+          cronActivities.push(...activities.map(a => ({ ...a, source: filePath })));
+        } else {
+          recentActivities.push(...activities.map(a => ({ ...a, source: filePath })));
+        }
       }
     }
-    
+
+    // 分别限制数量
     if (recentActivities.length > CONFIG.maxActivities) {
       recentActivities = recentActivities.slice(-CONFIG.maxActivities);
     }
-    
+    if (cronActivities.length > 50) {  // cron 只保留最近 50 条
+      cronActivities = cronActivities.slice(-50);
+    }
+
     console.log(`[Agent-Monitor] 加载 ${source === 'cron' ? 'cron' : agent}: ${path.basename(filePath)} (${lines.length} 行)`);
-    
+
     return fs.statSync(filePath).size;
   } catch (e) {
     console.error(`[Agent-Monitor] 加载失败 ${agent}:`, e.message);
@@ -286,30 +295,30 @@ function loadSessionFile(sessionInfo) {
 // 监控会话文件
 function watchSession(sessionInfo) {
   const { agent, path: filePath } = sessionInfo;
-  
+
   // 关闭旧监控
   if (activeSessions.has(agent)) {
     const old = activeSessions.get(agent);
     if (old.watcher) old.watcher.close();
   }
-  
+
   const lastSize = loadSessionFile(sessionInfo);
-  
+
   const watcher = fs.watch(filePath, (eventType) => {
     if (eventType !== 'change') return;
-    
+
     try {
       const stats = fs.statSync(filePath);
       const session = activeSessions.get(agent);
       if (!session || stats.size <= session.lastSize) return;
-      
+
       const fd = fs.openSync(filePath, 'r');
       const buffer = Buffer.alloc(stats.size - session.lastSize);
       fs.readSync(fd, buffer, 0, buffer.length, session.lastSize);
       fs.closeSync(fd);
-      
+
       const newLines = buffer.toString('utf8').split('\n').filter(l => l.trim());
-      
+
       for (const line of newLines) {
         const activities = parseActivityLine(line, agent);
         if (activities) {
@@ -321,13 +330,13 @@ function watchSession(sessionInfo) {
           }
         }
       }
-      
+
       session.lastSize = stats.size;
     } catch (err) {
       console.error(`[Agent-Monitor] 监控错误 ${agent}:`, err.message);
     }
   });
-  
+
   activeSessions.set(agent, { file: filePath, watcher, lastSize });
 }
 
@@ -335,27 +344,27 @@ function watchSession(sessionInfo) {
 function init() {
   const sessions = getAllSessions();
   const cronRuns = getCronRuns();
-  
+
   for (const session of sessions) {
     watchSession(session);
   }
-  
+
   // 加载 cron 数据（只加载，不监控文件变化）
   for (const cronRun of cronRuns) {
     loadSessionFile(cronRun);
   }
-  
+
   if (sessions.length === 0 && cronRuns.length === 0) {
     console.log('[Agent-Monitor] 未找到任何会话文件，等待中...');
   }
-  
+
   // 每10秒检查新会话
   setInterval(() => {
     const sessions = getAllSessions();
-    
+
     for (const session of sessions) {
       const existing = activeSessions.get(session.agent);
-      
+
       if (!existing) {
         console.log(`[Agent-Monitor] 发现新 agent: ${session.agent}`);
         watchSession(session);
@@ -364,7 +373,7 @@ function init() {
         watchSession(session);
       }
     }
-    
+
     // 定期刷新 cron 数据（每10秒检查一次）
     const newCronRuns = getCronRuns();
     for (const cronRun of newCronRuns) {
@@ -375,11 +384,13 @@ function init() {
 
 // 获取状态
 function getStatus() {
-  const sorted = recentActivities
+  // 合并 session 和 cron 记录
+  const allActivities = [...recentActivities, ...cronActivities];
+  const sorted = allActivities
     .slice()
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     .slice(0, CONFIG.maxActivities);
-  
+
   return {
     agents: Array.from(activeSessions.keys()),
     activities: sorted,
@@ -428,7 +439,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       line-height: 1.6;
     }
     .container { max-width: 1200px; margin: 0 auto; }
-    
+
     .header {
       display: flex;
       align-items: center;
@@ -438,7 +449,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       border-bottom: 1px solid #30363d;
       flex-wrap: wrap;
     }
-    
+
     .status-dot {
       width: 12px;
       height: 12px;
@@ -450,7 +461,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
     }
-    
+
     .header h1 { font-size: 20px; font-weight: 600; }
     .header .online { color: #7ee787; font-size: 14px; }
     .agents-list {
@@ -467,9 +478,9 @@ const HTML_PAGE = `<!DOCTYPE html>
       font-size: 12px;
       color: #7ee787;
     }
-    
+
     .activity-list { display: flex; flex-direction: column; gap: 6px; }
-    
+
     .activity-item {
       display: block;
       padding: 12px 14px;
@@ -479,9 +490,9 @@ const HTML_PAGE = `<!DOCTYPE html>
       font-size: 12px;
       margin-bottom: 6px;
     }
-    
+
     .activity-item:hover { background: #1c2128; border-color: #58a6ff; }
-    
+
     /* Agent 颜色 */
     .activity-item.LBP { border-left: 3px solid #238636; }
     .activity-item.DEEP { border-left: 3px solid #58a6ff; }
@@ -490,16 +501,16 @@ const HTML_PAGE = `<!DOCTYPE html>
     .activity-item.COOL { border-left: 3px solid #f7931a; }
     .activity-item.TIM { border-left: 3px solid #8b949e; }
     .activity-item.cron { border-left: 3px solid #8957e5; }
-    
+
     .meta {
       display: flex;
       gap: 8px;
       align-items: center;
       margin-bottom: 6px;
     }
-    
+
     .timestamp { color: #8b949e; font-size: 11px; }
-    
+
     .agent-name {
       padding: 2px 6px;
       border-radius: 4px;
@@ -514,19 +525,19 @@ const HTML_PAGE = `<!DOCTYPE html>
     .agent-name.COOL { background: #f7931a33; color: #f7931a; }
     .agent-name.TIM { background: #8b949e33; color: #8b949e; }
     .agent-name.cron { background: #8957e533; color: #8957e5; }
-    
+
     .description {
       color: #c9d1d9;
       white-space: pre-wrap;
       word-wrap: break-word;
       margin-top: 4px;
     }
-    
+
     .thinking .description { color: #8b949e; font-style: italic; }
     .reply .description { color: #c9d1d9; }
-    
+
     .empty { text-align: center; padding: 40px; color: #8b949e; }
-    
+
     .controls {
       margin-bottom: 16px;
       display: flex;
@@ -553,7 +564,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       <span class="online">OpenClaw 实时状态</span>
       <div class="agents-list" id="agents-list"></div>
     </div>
-    
+
     <div id="activity-list" class="activity-list">
       <div class="empty">加载中...</div>
     </div>
@@ -562,14 +573,14 @@ const HTML_PAGE = `<!DOCTYPE html>
   <script>
     const listEl = document.getElementById('activity-list');
     const agentsEl = document.getElementById('agents-list');
-    
+
     let pollCount = 0;
-    
+
     function formatTime(isoString) {
       const date = new Date(isoString);
       return date.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
-    
+
     function createActivityItem(activity) {
       const div = document.createElement('div');
       const agentClass = (activity.agent || 'unknown').toUpperCase();
@@ -577,30 +588,30 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (activity.type === 'thinking') div.classList.add('thinking');
       if (activity.type === 'reply') div.classList.add('reply');
       if (activity.type === 'cron') div.classList.add('cron');
-      
+
       const meta = document.createElement('div');
       meta.className = 'meta';
-      
+
       const time = document.createElement('span');
       time.className = 'timestamp';
       time.textContent = formatTime(activity.timestamp);
-      
+
       const agent = document.createElement('span');
       agent.className = 'agent-name ' + agentClass;
       agent.textContent = activity.agent || '?';
-      
+
       meta.appendChild(time);
       meta.appendChild(agent);
-      
+
       const desc = document.createElement('span');
       desc.className = 'description';
       desc.textContent = activity.description;
-      
+
       div.appendChild(meta);
       div.appendChild(desc);
       return div;
     }
-    
+
     function updateAgents(agents) {
       agentsEl.innerHTML = '';
       agents.forEach(agent => {
@@ -610,48 +621,48 @@ const HTML_PAGE = `<!DOCTYPE html>
         agentsEl.appendChild(tag);
       });
     }
-    
+
     function updateList(activities) {
       // 直接重新渲染整个列表，确保实时更新
       listEl.innerHTML = '';
-      
+
       console.log('[Agent-Monitor] 更新列表:', activities.length, 'activities');
-      
+
       if (activities.length === 0) {
         listEl.innerHTML = '<div class="empty">暂无活动</div>';
         return;
       }
-      
+
       activities.forEach(activity => {
         listEl.appendChild(createActivityItem(activity));
       });
     }
-    
+
     async function poll() {
       try {
         pollCount++;
         console.log('[Agent-Monitor] 轮询 #' + pollCount);
-        
+
         const res = await fetch('/api?t=' + Date.now(), {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         });
-        
+
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        
+
         const data = await res.json();
         console.log('[Agent-Monitor] 收到数据:', data.activities.length, 'activities');
-        
+
         updateAgents(data.agents || []);
         updateList(data.activities || []);
       } catch (err) {
         console.error('[Agent-Monitor] 请求失败:', err.message);
       }
     }
-    
+
     // 立即执行第一次
     poll();
-    
+
     // 每1秒轮询
     const intervalId = setInterval(poll, 1000);
     console.log('[Agent-Monitor] 轮询已启动, intervalId:', intervalId);
