@@ -1,0 +1,6 @@
+{
+  "agentsDir": "/Users/yourname/.openclaw/agents",
+  "maxActivities": 100,
+  "pollInterval": 10000,
+  "refreshInterval": 3000
+}

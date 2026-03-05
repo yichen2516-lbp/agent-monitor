@@ -1,28 +1,59 @@
 /**
  * Agent Monitor - OpenClaw Agent 实时状态监控
- * 
+ *
  * 独立运行版本，无需依赖 LBP-Tools
- * 
+ *
  * 使用方法:
  * 1. npm install
  * 2. npm start
  * 3. 访问 http://localhost:3450
+ *
+ * 配置方法 (按优先级):
+ * 1. 环境变量: AGENTS_DIR=/path/to/agents npm start
+ * 2. 配置文件: 创建 config.json 文件
+ * 3. 默认路径: ~/.openclaw/agents
  */
 
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 3450;
 
-// 配置
+// 读取配置文件
+function loadConfig() {
+  const configPath = path.join(__dirname, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const content = fs.readFileSync(configPath, 'utf8');
+      return JSON.parse(content);
+    } catch (e) {
+      console.error('[Agent-Monitor] 配置文件解析失败:', e.message);
+    }
+  }
+  return {};
+}
+
+const fileConfig = loadConfig();
+
+// 获取默认 agents 目录
+function getDefaultAgentsDir() {
+  // 根据操作系统返回默认路径
+  const homeDir = os.homedir();
+  return path.join(homeDir, '.openclaw', 'agents');
+}
+
+// 配置 (优先级: 环境变量 > 配置文件 > 默认)
 const CONFIG = {
-  agentsDir: '/Users/lbp/.openclaw/agents',
-  maxActivities: 100,
-  pollInterval: 10000, // 检查新会话间隔
-  refreshInterval: 3000 // 前端刷新间隔
+  agentsDir: process.env.AGENTS_DIR || fileConfig.agentsDir || getDefaultAgentsDir(),
+  maxActivities: process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 100,
+  pollInterval: process.env.POLL_INTERVAL || fileConfig.pollInterval || 10000,
+  refreshInterval: process.env.REFRESH_INTERVAL || fileConfig.refreshInterval || 1000
 };
+
+console.log('[Agent-Monitor] Agents 目录:', CONFIG.agentsDir);
 
 // 状态
 let recentActivities = [];
@@ -268,10 +299,15 @@ function getStatus() {
 
 // 路由
 app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.send(HTML_PAGE);
 });
 
 app.get('/api', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Content-Type', 'application/json');
   res.json(getStatus());
 });
 
@@ -286,8 +322,12 @@ const HTML_PAGE = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta http-equiv="Cache-Control" content="no-store">
-  <title>Agent Monitor - OpenClaw 实时状态</title>
+  <title>Agent Monitor v1.2 - OpenClaw 实时状态</title>
+  <!-- v1.2: fixed JS errors -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -336,14 +376,6 @@ const HTML_PAGE = `<!DOCTYPE html>
       border-radius: 12px;
       font-size: 12px;
       color: #7ee787;
-    }
-    
-    .stats {
-      display: flex;
-      gap: 20px;
-      margin-bottom: 20px;
-      font-size: 13px;
-      color: #8b949e;
     }
     
     .activity-list { display: flex; flex-direction: column; gap: 6px; }
@@ -403,19 +435,6 @@ const HTML_PAGE = `<!DOCTYPE html>
     
     .empty { text-align: center; padding: 40px; color: #8b949e; }
     
-    .connection-status {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      padding: 8px 16px;
-      background: #238636;
-      color: white;
-      border-radius: 20px;
-      font-size: 12px;
-      transition: all 0.3s;
-    }
-    .connection-status.disconnected { background: #da3633; }
-    
     .controls {
       margin-bottom: 16px;
       display: flex;
@@ -443,26 +462,16 @@ const HTML_PAGE = `<!DOCTYPE html>
       <div class="agents-list" id="agents-list"></div>
     </div>
     
-    <div class="stats" id="stats">
-      <span>Agents: <strong id="agent-count">0</strong></span>
-      <span>Activities: <strong id="activity-count">0</strong></span>
-    </div>
-    
     <div id="activity-list" class="activity-list">
       <div class="empty">加载中...</div>
     </div>
-    
-    <div id="connection-status" class="connection-status">连接中...</div>
   </div>
 
   <script>
     const listEl = document.getElementById('activity-list');
-    const statusEl = document.getElementById('connection-status');
     const agentsEl = document.getElementById('agents-list');
-    const agentCountEl = document.getElementById('agent-count');
-    const activityCountEl = document.getElementById('activity-count');
     
-    let lastActivities = [];
+    let pollCount = 0;
     
     function formatTime(isoString) {
       const date = new Date(isoString);
@@ -506,49 +515,52 @@ const HTML_PAGE = `<!DOCTYPE html>
         tag.textContent = agent;
         agentsEl.appendChild(tag);
       });
-      agentCountEl.textContent = agents.length;
     }
     
     function updateList(activities) {
+      // 直接重新渲染整个列表，确保实时更新
+      listEl.innerHTML = '';
+      
+      console.log('[Agent-Monitor] 更新列表:', activities.length, 'activities');
+      
       if (activities.length === 0) {
         listEl.innerHTML = '<div class="empty">暂无活动</div>';
-        activityCountEl.textContent = 0;
         return;
       }
       
-      // 只更新有变化的部分
-      const currentCount = listEl.children.length;
-      const newCount = activities.length;
-      
-      if (currentCount === 0 || newCount > currentCount) {
-        listEl.innerHTML = '';
-        activities.forEach(activity => {
-          listEl.appendChild(createActivityItem(activity));
-        });
-      }
-      
-      activityCountEl.textContent = activities.length;
-      lastActivities = activities;
+      activities.forEach(activity => {
+        listEl.appendChild(createActivityItem(activity));
+      });
     }
     
     async function poll() {
       try {
-        const res = await fetch('/api?t=' + Date.now());
+        pollCount++;
+        console.log('[Agent-Monitor] 轮询 #' + pollCount);
+        
+        const res = await fetch('/api?t=' + Date.now(), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        
         const data = await res.json();
+        console.log('[Agent-Monitor] 收到数据:', data.activities.length, 'activities');
         
         updateAgents(data.agents || []);
         updateList(data.activities || []);
-        
-        statusEl.textContent = '实时连接 (' + (data.agents || []).length + ' agents)';
-        statusEl.classList.remove('disconnected');
       } catch (err) {
-        statusEl.textContent = '连接失败 - 重试中...';
-        statusEl.classList.add('disconnected');
+        console.error('[Agent-Monitor] 请求失败:', err.message);
       }
     }
     
+    // 立即执行第一次
     poll();
-    setInterval(poll, 3000);
+    
+    // 每1秒轮询
+    const intervalId = setInterval(poll, 1000);
+    console.log('[Agent-Monitor] 轮询已启动, intervalId:', intervalId);
   </script>
 </body>
 </html>`;
@@ -556,12 +568,13 @@ const HTML_PAGE = `<!DOCTYPE html>
 // 启动
 init();
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════════════════╗
 ║              Agent Monitor 已启动                      ║
 ╠════════════════════════════════════════════════════════╣
-║  访问地址: http://localhost:${PORT}                    ║
+║  本地访问: http://localhost:${PORT}                    ║
+║  局域网访问: http://0.0.0.0:${PORT}                    ║
 ║  API: http://localhost:${PORT}/api                     ║
 ╚════════════════════════════════════════════════════════╝
   `);
