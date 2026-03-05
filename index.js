@@ -140,7 +140,7 @@ function getCronRuns() {
 }
 
 // 解析单行活动
-function parseActivityLine(line, agentName) {
+function parseActivityLine(line, agentName, sessionName) {
   try {
     const data = JSON.parse(line);
     if (!data.timestamp) return null;
@@ -181,6 +181,7 @@ function parseActivityLine(line, agentName) {
           activities.push({
             type: 'tool',
             agent: agentName,
+            sessionName: sessionName,
             tool: toolName,
             description,
             timestamp: itemTimestamp.toISOString()
@@ -191,6 +192,7 @@ function parseActivityLine(line, agentName) {
           activities.push({
             type: 'thinking',
             agent: agentName,
+            sessionName: sessionName,
             description: `💭 thinking: ${item.thinking || ''}`,
             timestamp: itemTimestamp.toISOString()
           });
@@ -200,6 +202,7 @@ function parseActivityLine(line, agentName) {
           activities.push({
             type: 'reply',
             agent: agentName,
+            sessionName: sessionName,
             description: `💬 ${item.text}`,
             timestamp: itemTimestamp.toISOString(),
             fullText: item.text
@@ -226,19 +229,23 @@ function parseCronLine(line) {
     const error = data.error || '';
     const duration = data.durationMs ? `(${Math.round(data.durationMs / 1000)}s)` : '';
 
-    // 从 sessionKey 中提取 agent 名称
+    // 从 sessionKey 中提取 agent 名称和 session ID
     let agentName = 'cron';
+    let sessionName = '';
     if (data.sessionKey) {
       const match = data.sessionKey.match(/agent:([^:]+):/);
       if (match) agentName = match[1];
+      const sessionMatch = data.sessionKey.match(/:run:([^:]+)/);
+      if (sessionMatch) sessionName = sessionMatch[1].slice(0, 8);
     }
 
     const statusEmoji = status === 'ok' ? '✅' : status === 'error' ? '❌' : '⏳';
-    const description = `${statusEmoji} cron ${duration} ${summary.slice(0, 100)}${summary.length > 100 ? '...' : ''}`;
+    const description = `${statusEmoji} ${duration} ${summary.slice(0, 100)}${summary.length > 100 ? '...' : ''}`;
 
     return [{
       type: 'cron',
       agent: agentName,
+      sessionName: sessionName || 'cron',
       tool: 'cron',
       description,
       timestamp,
@@ -253,18 +260,21 @@ function parseCronLine(line) {
 
 // 加载会话文件
 function loadSessionFile(sessionInfo) {
-  const { agent, path: filePath, source } = sessionInfo;
+  const { agent, path: filePath, source, name } = sessionInfo;
 
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const lines = content.split('\n').filter(l => l.trim());
+
+    // 提取 session 名称（从文件名）
+    const sessionName = name ? name.replace('.jsonl', '').slice(0, 8) : '';
 
     for (const line of lines) {
       let activities;
       if (source === 'cron') {
         activities = parseCronLine(line);
       } else {
-        activities = parseActivityLine(line, agent);
+        activities = parseActivityLine(line, agent, sessionName);
       }
       if (activities) {
         if (source === 'cron') {
@@ -304,6 +314,9 @@ function watchSession(sessionInfo) {
 
   const lastSize = loadSessionFile(sessionInfo);
 
+  // 提取 session 名称
+  const sessionName = sessionInfo.name ? sessionInfo.name.replace('.jsonl', '').slice(0, 8) : '';
+
   const watcher = fs.watch(filePath, (eventType) => {
     if (eventType !== 'change') return;
 
@@ -320,7 +333,7 @@ function watchSession(sessionInfo) {
       const newLines = buffer.toString('utf8').split('\n').filter(l => l.trim());
 
       for (const line of newLines) {
-        const activities = parseActivityLine(line, agent);
+        const activities = parseActivityLine(line, agent, sessionName);
         if (activities) {
           for (const activity of activities) {
             recentActivities.push(activity);
@@ -337,7 +350,7 @@ function watchSession(sessionInfo) {
     }
   });
 
-  activeSessions.set(agent, { file: filePath, watcher, lastSize });
+  activeSessions.set(agent, { file: filePath, watcher, lastSize, sessionName });
 }
 
 // 初始化所有 agent
@@ -507,6 +520,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       gap: 8px;
       align-items: center;
       margin-bottom: 6px;
+      flex-wrap: wrap;
     }
 
     .timestamp { color: #8b949e; font-size: 11px; }
@@ -525,6 +539,26 @@ const HTML_PAGE = `<!DOCTYPE html>
     .agent-name.COOL { background: #f7931a33; color: #f7931a; }
     .agent-name.TIM { background: #8b949e33; color: #8b949e; }
     .agent-name.cron { background: #8957e533; color: #8957e5; }
+
+    .session-name {
+      color: #58a6ff;
+      font-size: 10px;
+      font-family: monospace;
+      background: #161b22;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #30363d;
+    }
+
+    .cron-tag {
+      padding: 2px 6px;
+      background: #8957e533;
+      border: 1px solid #8957e5;
+      border-radius: 4px;
+      font-size: 10px;
+      color: #8957e5;
+      font-weight: 600;
+    }
 
     .description {
       color: #c9d1d9;
@@ -600,8 +634,21 @@ const HTML_PAGE = `<!DOCTYPE html>
       agent.className = 'agent-name ' + agentClass;
       agent.textContent = activity.agent || '?';
 
+      const session = document.createElement('span');
+      session.className = 'session-name';
+      session.textContent = activity.sessionName || '-';
+
       meta.appendChild(time);
       meta.appendChild(agent);
+      meta.appendChild(session);
+
+      // 如果是 cron 类型，添加 cron tag
+      if (activity.type === 'cron') {
+        const cronTag = document.createElement('span');
+        cronTag.className = 'cron-tag';
+        cronTag.textContent = 'CRON';
+        meta.appendChild(cronTag);
+      }
 
       const desc = document.createElement('span');
       desc.className = 'description';
