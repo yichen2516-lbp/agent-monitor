@@ -59,6 +59,8 @@ console.log('[Agent-Monitor] Agents 目录:', CONFIG.agentsDir);
 let recentActivities = [];
 let cronActivities = [];
 let activeSessions = new Map();
+// 用于存储 toolCall 和 toolResult 的关联信息
+let pendingToolCalls = new Map();
 
 // 获取所有 agent 的最新会话文件
 function getAllSessions() {
@@ -148,8 +150,34 @@ function parseActivityLine(line, agentName, sessionName) {
     const baseTimestamp = new Date(data.timestamp).getTime();
     const activities = [];
 
+    // 处理 toolResult - 存储以便后续 toolCall 关联
+    if (data.type === 'message' && data.message?.role === 'toolResult') {
+      const toolCallId = data.message.toolCallId;
+      const details = data.message.details || {};
+      if (toolCallId) {
+        pendingToolCalls.set(toolCallId, {
+          durationMs: details.durationMs,
+          exitCode: details.exitCode,
+          status: details.status,
+          isError: data.message.isError
+        });
+        // 清理旧的 pendingToolCalls（保留最近100个）
+        if (pendingToolCalls.size > 100) {
+          const firstKey = pendingToolCalls.keys().next().value;
+          pendingToolCalls.delete(firstKey);
+        }
+      }
+      return null; // toolResult 不直接显示
+    }
+
     if (data.type === 'message' && data.message?.role === 'assistant') {
       const content = data.message.content || [];
+      
+      // 提取模型和 usage 信息
+      const model = data.model || data.message.model;
+      const provider = data.provider || data.message.provider;
+      const usage = data.usage;
+      const stopReason = data.stopReason;
 
       content.forEach((item, index) => {
         const itemTimestamp = new Date(baseTimestamp + index * 10);
@@ -157,6 +185,7 @@ function parseActivityLine(line, agentName, sessionName) {
         if (item.type === 'toolCall') {
           const toolName = item.name || 'unknown';
           const args = item.arguments || {};
+          const toolCallId = item.id;
 
           let description = '';
           const toolMap = {
@@ -178,23 +207,41 @@ function parseActivityLine(line, agentName, sessionName) {
 
           description = toolMap[toolName] ? toolMap[toolName]() : `⚙️  ${toolName}`;
 
+          // 尝试获取关联的 toolResult 信息
+          const toolResult = toolCallId ? pendingToolCalls.get(toolCallId) : null;
+
           activities.push({
             type: 'tool',
             agent: agentName,
             sessionName: sessionName,
             tool: toolName,
             description,
-            timestamp: itemTimestamp.toISOString()
+            timestamp: itemTimestamp.toISOString(),
+            // 新增元数据
+            model: model,
+            provider: provider,
+            usage: usage,
+            stopReason: stopReason,
+            durationMs: toolResult?.durationMs,
+            exitCode: toolResult?.exitCode,
+            toolStatus: toolResult?.status,
+            toolError: toolResult?.isError
           });
         }
 
         if (item.type === 'thinking') {
+          const thinkingText = item.thinking || '';
           activities.push({
             type: 'thinking',
             agent: agentName,
             sessionName: sessionName,
-            description: `💭 thinking: ${item.thinking || ''}`,
-            timestamp: itemTimestamp.toISOString()
+            description: `💭 ${thinkingText}`,
+            timestamp: itemTimestamp.toISOString(),
+            // 新增元数据
+            model: model,
+            provider: provider,
+            usage: usage,
+            stopReason: stopReason
           });
         }
 
@@ -205,7 +252,12 @@ function parseActivityLine(line, agentName, sessionName) {
             sessionName: sessionName,
             description: `💬 ${item.text}`,
             timestamp: itemTimestamp.toISOString(),
-            fullText: item.text
+            fullText: item.text,
+            // 新增元数据
+            model: model,
+            provider: provider,
+            usage: usage,
+            stopReason: stopReason
           });
         }
       });
@@ -228,6 +280,8 @@ function parseCronLine(line) {
     const summary = data.summary || '';
     const error = data.error || '';
     const duration = data.durationMs ? `(${Math.round(data.durationMs / 1000)}s)` : '';
+    const durationMs = data.durationMs;
+    const usage = data.usage;
 
     // 从 sessionKey 中提取 agent 名称和 session ID
     let agentName = 'cron';
@@ -251,7 +305,9 @@ function parseCronLine(line) {
       timestamp,
       status,
       fullSummary: summary,
-      error: error
+      error: error,
+      durationMs: durationMs,
+      usage: usage
     }];
   } catch (e) {
     return null;
@@ -440,8 +496,8 @@ const HTML_PAGE = `<!DOCTYPE html>
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="Cache-Control" content="no-store">
-  <title>Agent Monitor v1.3 - OpenClaw 实时状态</title>
-  <!-- v1.3: added cron monitoring -->
+  <title>Agent Monitor v1.4 - OpenClaw 实时状态</title>
+  <!-- v1.4: added model, token usage, duration, exit code -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -560,6 +616,58 @@ const HTML_PAGE = `<!DOCTYPE html>
       font-weight: 600;
     }
 
+    /* 新增：模型信息标签 */
+    .model-tag {
+      padding: 2px 6px;
+      background: #1f6feb33;
+      border: 1px solid #1f6feb;
+      border-radius: 4px;
+      font-size: 10px;
+      color: #58a6ff;
+      font-family: monospace;
+    }
+
+    /* 新增：Token 信息标签 */
+    .token-tag {
+      padding: 2px 6px;
+      background: #3fb95033;
+      border: 1px solid #3fb950;
+      border-radius: 4px;
+      font-size: 10px;
+      color: #7ee787;
+      font-family: monospace;
+    }
+
+    /* 新增：执行时间标签 */
+    .duration-tag {
+      padding: 2px 6px;
+      background: #d2992233;
+      border: 1px solid #d29922;
+      border-radius: 4px;
+      font-size: 10px;
+      color: #e3b341;
+      font-family: monospace;
+    }
+
+    /* 新增：退出码标签 */
+    .exitcode-tag {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: monospace;
+      font-weight: 600;
+    }
+    .exitcode-tag.success {
+      background: #23863633;
+      border: 1px solid #238636;
+      color: #7ee787;
+    }
+    .exitcode-tag.error {
+      background: #da363333;
+      border: 1px solid #da3633;
+      color: #f85149;
+    }
+
     .description {
       color: #c9d1d9;
       white-space: pre-wrap;
@@ -569,6 +677,17 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     .thinking .description { color: #8b949e; font-style: italic; }
     .reply .description { color: #c9d1d9; }
+
+    /* 新增：详细信息行 */
+    .details-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #21262d;
+      flex-wrap: wrap;
+    }
 
     .empty { text-align: center; padding: 40px; color: #8b949e; }
 
@@ -615,6 +734,22 @@ const HTML_PAGE = `<!DOCTYPE html>
       return date.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
+    function formatDuration(ms) {
+      if (!ms) return null;
+      if (ms < 1000) return ms + 'ms';
+      return (ms / 1000).toFixed(1) + 's';
+    }
+
+    function formatTokens(usage) {
+      if (!usage || typeof usage !== 'object') return null;
+      let total = usage.totalTokens || usage.total_tokens;
+      if (!total && (typeof usage.input === 'number' || typeof usage.output === 'number')) {
+        total = (usage.input || 0) + (usage.output || 0);
+      }
+      if (!total || isNaN(total)) return null;
+      return Number(total).toLocaleString();
+    }
+
     function createActivityItem(activity) {
       const div = document.createElement('div');
       const agentClass = (activity.agent || 'unknown').toUpperCase();
@@ -656,6 +791,48 @@ const HTML_PAGE = `<!DOCTYPE html>
 
       div.appendChild(meta);
       div.appendChild(desc);
+
+      // 新增：详细信息行（模型、token、执行时间、退出码）
+      const detailsRow = document.createElement('div');
+      detailsRow.className = 'details-row';
+
+      // 模型信息
+      if (activity.model) {
+        const modelTag = document.createElement('span');
+        modelTag.className = 'model-tag';
+        modelTag.textContent = activity.model;
+        detailsRow.appendChild(modelTag);
+      }
+
+      // Token 消耗
+      if (activity.usage) {
+        const tokenTag = document.createElement('span');
+        tokenTag.className = 'token-tag';
+        tokenTag.textContent = '⚡ ' + formatTokens(activity.usage) + ' tokens';
+        detailsRow.appendChild(tokenTag);
+      }
+
+      // 执行时间
+      if (activity.durationMs) {
+        const durationTag = document.createElement('span');
+        durationTag.className = 'duration-tag';
+        durationTag.textContent = '⏱️ ' + formatDuration(activity.durationMs);
+        detailsRow.appendChild(durationTag);
+      }
+
+      // 工具退出码（仅对 tool 类型）
+      if (activity.type === 'tool' && activity.exitCode !== undefined) {
+        const exitCodeTag = document.createElement('span');
+        exitCodeTag.className = 'exitcode-tag ' + (activity.exitCode === 0 ? 'success' : 'error');
+        exitCodeTag.textContent = 'Exit: ' + activity.exitCode;
+        detailsRow.appendChild(exitCodeTag);
+      }
+
+      // 如果有详细信息，添加到卡片
+      if (detailsRow.children.length > 0) {
+        div.appendChild(detailsRow);
+      }
+
       return div;
     }
 

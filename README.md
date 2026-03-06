@@ -3,7 +3,7 @@
 实时监控 OpenClaw Agent 运行状态的可视化工具。
 
 ![Status](https://img.shields.io/badge/status-active-green)
-![Version](https://img.shields.io/badge/version-1.3-blue)
+![Version](https://img.shields.io/badge/version-1.4-blue)
 
 ## 功能特性
 
@@ -14,17 +14,23 @@
 - 📱 **响应式设计** - 适配桌面和移动设备
 - 🌙 **深色主题** - 护眼设计，适合长时间监控
 - ⚡ **自动刷新** - 1 秒间隔实时更新
+- 🔍 **详细元数据** - 模型信息、Token消耗、执行时间、退出码
 
 ## 界面展示
 
 每条记录显示格式：
 ```
 [时间] [Agent名] [Session名] [Cron标签]
-└─ 活动内容（工具调用/思考/回复）
+├─ 活动内容（工具调用/思考/回复）
+└─ [模型] [Token消耗] [执行时间] [退出码]
 ```
 
 - **Session 名**: 8位字符，标识当前会话
 - **Cron 标签**: 紫色标识，仅定时任务显示
+- **模型**: 蓝色标签，如 `k2p5`, `M2.5`
+- **Token消耗**: 绿色标签，如 `⚡ 13,202 tokens`
+- **执行时间**: 黄色标签，如 `⏱️ 17ms`
+- **退出码**: 成功绿色/失败红色，如 `Exit: 0`
 
 ## 快速开始
 
@@ -95,14 +101,20 @@ GET /api
       "sessionName": "a3cab77d",
       "tool": "read",
       "description": "📄 read    /path/to/file.js",
-      "timestamp": "2026-03-05T15:30:00.000Z"
+      "timestamp": "2026-03-05T15:30:00.000Z",
+      "model": "k2p5",
+      "usage": { "totalTokens": 13202 },
+      "durationMs": 17,
+      "exitCode": 0
     },
     {
       "type": "cron",
       "agent": "main",
       "sessionName": "04e01164",
       "description": "✅ (45s) ETF数据同步完成",
-      "timestamp": "2026-03-05T15:25:00.000Z"
+      "timestamp": "2026-03-05T15:25:00.000Z",
+      "durationMs": 45000,
+      "status": "ok"
     }
   ],
   "updatedAt": "2026-03-05T15:30:00.000Z"
@@ -165,6 +177,15 @@ npm start
 ```
 
 ## Changelog
+
+### v1.4.0
+- 新增元数据显示：
+  - 模型信息（如 k2p5, M2.5）
+  - Token 消耗统计
+  - 工具执行时间
+  - 工具退出码（成功/失败状态）
+- 修复 thinking 内容显示
+- 修复 NaN tokens 问题
 
 ### v1.3.3
 - Cron 内容不再截断，显示完整输出
