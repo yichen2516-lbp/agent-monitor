@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const os = require('os');
+const { execSync } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3450;
@@ -61,6 +62,154 @@ let cronActivities = [];
 let activeSessions = new Map();
 // 用于存储 toolCall 和 toolResult 的关联信息
 let pendingToolCalls = new Map();
+
+// 系统监控状态
+let systemStats = {
+  cpu: { used: 0, user: 0, sys: 0, idle: 100 },
+  gpu: { used: 0, name: 'N/A' },
+  memory: { used: 0, total: 0, percentage: 0 },
+  disk: { used: 0, total: 0, percentage: 0 },
+  updatedAt: null
+};
+
+// 获取 CPU 使用情况 (macOS)
+function getCPUStats() {
+  try {
+    // 使用 top 命令获取 CPU 使用率
+    const output = execSync('top -l 1 -n 0 | grep "CPU usage"', { encoding: 'utf8', timeout: 5000 });
+    // 格式: CPU usage: 12.34% user, 5.67% sys, 81.99% idle
+    const match = output.match(/(\d+\.?\d*)%\s*user.*?(\d+\.?\d*)%\s*sys.*?(\d+\.?\d*)%\s*idle/);
+    if (match) {
+      const user = parseFloat(match[1]) || 0;
+      const sys = parseFloat(match[2]) || 0;
+      const idle = parseFloat(match[3]) || 0;
+      const used = Math.round(user + sys);
+      return { used, user, sys, idle };
+    }
+  } catch (e) {
+    // 备用方案：使用 iostat
+    try {
+      const output = execSync('iostat -c 1', { encoding: 'utf8', timeout: 5000 });
+      const lines = output.trim().split('\n');
+      const lastLine = lines[lines.length - 1];
+      const parts = lastLine.split(/\s+/);
+      if (parts.length >= 3) {
+        const user = parseFloat(parts[0]) || 0;
+        const sys = parseFloat(parts[1]) || 0;
+        const used = Math.round(user + sys);
+        return { used, user, sys, idle: 100 - used };
+      }
+    } catch (e2) {
+      console.error('[Agent-Monitor] 获取 CPU 信息失败:', e2.message);
+    }
+  }
+  return { used: 0, user: 0, sys: 0, idle: 100 };
+}
+
+// 获取 GPU 使用情况 (macOS)
+function getGPUStats() {
+  try {
+    // 方法1: 使用 ioreg 获取 GPU 信息
+    const output = execSync('ioreg -l | grep -E "(GPU|Metal|AGC|performanceStatistics)" | head -20', { encoding: 'utf8', timeout: 5000 });
+    
+    // 尝试解析 GPU 使用率
+    let used = 0;
+    let name = 'Apple Silicon';
+    
+    // 查找 GPU 活动百分比
+    const activityMatch = output.match(/"GPU Activity"[=:]\s*(\d+)/i) || 
+                         output.match(/gpuActivePercentage\s*=\s*(\d+)/i) ||
+                         output.match(/GPU\s*usage[:\s]*(\d+)%?/i);
+    if (activityMatch) {
+      used = parseInt(activityMatch[1]) || 0;
+    }
+    
+    // 查找 GPU 名称
+    const nameMatch = output.match(/"model"[=:]\s*"([^"]+)"/i) ||
+                     output.match(/"device_name"[=:]\s*"([^"]+)"/i);
+    if (nameMatch) {
+      name = nameMatch[1];
+    }
+    
+    return { used, name };
+  } catch (e) {
+    // 备用方案: 使用 system_profiler
+    try {
+      const output = execSync('system_profiler SPDisplaysDataType | grep -E "(Chipset|VRAM|Metal)" | head -5', { encoding: 'utf8', timeout: 10000 });
+      const nameMatch = output.match(/Chipset Model:\s*(.+)/);
+      const name = nameMatch ? nameMatch[1].trim() : 'GPU';
+      return { used: 0, name };
+    } catch (e2) {
+      console.error('[Agent-Monitor] 获取 GPU 信息失败:', e2.message);
+    }
+  }
+  return { used: 0, name: 'GPU' };
+}
+
+// 获取内存使用情况
+function getMemoryStats() {
+  try {
+    const total = os.totalmem();
+    const free = os.freemem();
+    const used = total - free;
+    return {
+      used: Math.round(used / 1024 / 1024 / 1024 * 100) / 100, // GB
+      total: Math.round(total / 1024 / 1024 / 1024 * 100) / 100, // GB
+      percentage: Math.round((used / total) * 100)
+    };
+  } catch (e) {
+    console.error('[Agent-Monitor] 获取内存信息失败:', e.message);
+    return { used: 0, total: 0, percentage: 0 };
+  }
+}
+
+// 获取磁盘使用情况 (macOS/Linux)
+function getDiskStats() {
+  try {
+    const output = execSync('df -h /', { encoding: 'utf8', timeout: 5000 });
+    const lines = output.trim().split('\n');
+    if (lines.length >= 2) {
+      const parts = lines[1].split(/\s+/);
+      // 格式: Filesystem Size Used Avail Capacity iused ifree %iused  Mounted on
+      if (parts.length >= 5) {
+        const total = parts[1];
+        const used = parts[2];
+        const percentage = parseInt(parts[4].replace('%', '')) || 0;
+        // 转换为 GB 数值
+        const totalGB = parseFloat(total.replace(/[GT]/, '')) * (total.includes('T') ? 1024 : 1);
+        const usedGB = parseFloat(used.replace(/[GT]/, '')) * (used.includes('T') ? 1024 : 1);
+        return { used: Math.round(usedGB * 100) / 100, total: Math.round(totalGB * 100) / 100, percentage };
+      }
+    }
+  } catch (e) {
+    console.error('[Agent-Monitor] 获取磁盘信息失败:', e.message);
+  }
+  return { used: 0, total: 0, percentage: 0 };
+}
+
+// 更新系统监控数据
+function updateSystemStats() {
+  try {
+    const cpu = getCPUStats();
+    const gpu = getGPUStats();
+    const memory = getMemoryStats();
+    const disk = getDiskStats();
+
+    systemStats = {
+      cpu,
+      gpu,
+      memory,
+      disk,
+      updatedAt: new Date().toISOString()
+    };
+  } catch (e) {
+    console.error('[Agent-Monitor] 更新系统监控失败:', e.message);
+  }
+}
+
+// 启动系统监控 (每2秒更新一次)
+setInterval(updateSystemStats, 2000);
+updateSystemStats(); // 立即执行一次
 
 // 获取所有 agent 的最新会话文件
 function getAllSessions() {
@@ -463,6 +612,7 @@ function getStatus() {
   return {
     agents: Array.from(activeSessions.keys()),
     activities: sorted,
+    system: systemStats,
     updatedAt: new Date().toISOString()
   };
 }
@@ -668,6 +818,35 @@ const HTML_PAGE = `<!DOCTYPE html>
       color: #f85149;
     }
 
+    /* 系统监控面板样式 - 紧凑单行 */
+    .system-panel {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+
+    .system-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .system-label {
+      color: #8b949e;
+      font-weight: 500;
+    }
+
+    .system-value-inline {
+      color: #c9d1d9;
+      font-weight: 600;
+    }
+
     .description {
       color: #c9d1d9;
       white-space: pre-wrap;
@@ -716,6 +895,26 @@ const HTML_PAGE = `<!DOCTYPE html>
       <h1>⚡ Agent Monitor</h1>
       <span class="online">OpenClaw 实时状态</span>
       <div class="agents-list" id="agents-list"></div>
+    </div>
+
+    <!-- 系统监控面板 -->
+    <div class="system-panel" id="system-panel">
+      <div class="system-item">
+        <span class="system-label">CPU:</span>
+        <span class="system-value-inline" id="cpu-value">--</span>
+      </div>
+      <div class="system-item">
+        <span class="system-label">GPU:</span>
+        <span class="system-value-inline" id="gpu-value">--</span>
+      </div>
+      <div class="system-item">
+        <span class="system-label">MEM:</span>
+        <span class="system-value-inline" id="mem-value">--</span>
+      </div>
+      <div class="system-item">
+        <span class="system-label">DISK:</span>
+        <span class="system-value-inline" id="disk-value">--</span>
+      </div>
     </div>
 
     <div id="activity-list" class="activity-list">
@@ -879,8 +1078,34 @@ const HTML_PAGE = `<!DOCTYPE html>
 
         updateAgents(data.agents || []);
         updateList(data.activities || []);
+        updateSystemPanel(data.system);
       } catch (err) {
         console.error('[Agent-Monitor] 请求失败:', err.message);
+      }
+    }
+
+    // 更新系统监控面板
+    function updateSystemPanel(system) {
+      if (!system) return;
+
+      // CPU
+      if (system.cpu) {
+        document.getElementById('cpu-value').textContent = system.cpu.used + '%';
+      }
+
+      // GPU
+      if (system.gpu) {
+        document.getElementById('gpu-value').textContent = system.gpu.used + '%';
+      }
+
+      // 内存
+      if (system.memory) {
+        document.getElementById('mem-value').textContent = system.memory.percentage + '%';
+      }
+
+      // 磁盘
+      if (system.disk) {
+        document.getElementById('disk-value').textContent = system.disk.percentage + '%';
       }
     }
 

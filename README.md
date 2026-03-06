@@ -3,7 +3,7 @@
 实时监控 OpenClaw Agent 运行状态的可视化工具。
 
 ![Status](https://img.shields.io/badge/status-active-green)
-![Version](https://img.shields.io/badge/version-1.4-blue)
+![Version](https://img.shields.io/badge/version-1.5-blue)
 
 ## 功能特性
 
@@ -11,6 +11,7 @@
 - 📝 **活动记录** - 显示工具调用、思考过程、回复内容
 - 🎨 **多 Agent 支持** - 自动识别并区分不同 Agent
 - ⏰ **Cron 监控** - 同时显示定时任务执行记录
+- 📊 **系统监控** - CPU / GPU / 内存 / 磁盘实时状态
 - 📱 **响应式设计** - 适配桌面和移动设备
 - 🌙 **深色主题** - 护眼设计，适合长时间监控
 - ⚡ **自动刷新** - 1 秒间隔实时更新
@@ -18,7 +19,13 @@
 
 ## 界面展示
 
-每条记录显示格式：
+### 系统监控栏
+顶部显示实时系统资源状态：
+```
+CPU: 15% GPU: 0% MEM: 97% DISK: 6%
+```
+
+### Agent 活动记录
 ```
 [时间] [Agent名] [Session名] [Cron标签]
 ├─ 活动内容（工具调用/思考/回复）
@@ -94,29 +101,13 @@ GET /api
 ```json
 {
   "agents": ["main", "edge", "cool", "tim"],
-  "activities": [
-    {
-      "type": "tool",
-      "agent": "main",
-      "sessionName": "a3cab77d",
-      "tool": "read",
-      "description": "📄 read    /path/to/file.js",
-      "timestamp": "2026-03-05T15:30:00.000Z",
-      "model": "k2p5",
-      "usage": { "totalTokens": 13202 },
-      "durationMs": 17,
-      "exitCode": 0
-    },
-    {
-      "type": "cron",
-      "agent": "main",
-      "sessionName": "04e01164",
-      "description": "✅ (45s) ETF数据同步完成",
-      "timestamp": "2026-03-05T15:25:00.000Z",
-      "durationMs": 45000,
-      "status": "ok"
-    }
-  ],
+  "activities": [...],
+  "system": {
+    "cpu": { "used": 15, "user": 3.5, "sys": 11.5 },
+    "gpu": { "used": 0, "name": "Apple Silicon" },
+    "memory": { "used": 7.8, "total": 8, "percentage": 97 },
+    "disk": { "used": 10, "total": 233, "percentage": 6 }
+  },
   "updatedAt": "2026-03-05T15:30:00.000Z"
 }
 ```
@@ -177,6 +168,14 @@ npm start
 ```
 
 ## Changelog
+
+### v1.5.0
+- 新增系统资源监控栏：
+  - CPU 使用率 (user/sys 细分)
+  - GPU 使用率 (支持 Apple Silicon)
+  - 内存使用率
+  - 磁盘使用率
+- 紧凑单行布局显示系统状态
 
 ### v1.4.0
 - 新增元数据显示：
