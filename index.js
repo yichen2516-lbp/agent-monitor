@@ -1103,10 +1103,22 @@ const HTML_PAGE = `<!DOCTYPE html>
       });
     }
 
+    // 轮询配置
+    const POLL_CONFIG = {
+      defaultInterval: 5000,  // 默认5秒
+      fastInterval: 1000,     // 快速1秒
+      fastDuration: 10000     // 快速模式持续10秒
+    };
+
+    let currentInterval = POLL_CONFIG.defaultInterval;
+    let lastActivityCount = 0;
+    let fastModeTimer = null;
+    let intervalId = null;
+
     async function poll() {
       try {
         pollCount++;
-        console.log('[Agent-Monitor] 轮询 #' + pollCount);
+        console.log('[Agent-Monitor] 轮询 #' + pollCount + ' (间隔: ' + currentInterval + 'ms)');
 
         const res = await fetch('/api?t=' + Date.now(), {
           cache: 'no-store',
@@ -1116,7 +1128,19 @@ const HTML_PAGE = `<!DOCTYPE html>
         if (!res.ok) throw new Error('HTTP ' + res.status);
 
         const data = await res.json();
-        console.log('[Agent-Monitor] 收到数据:', data.activities.length, 'activities');
+        const activityCount = data.activities ? data.activities.length : 0;
+        console.log('[Agent-Monitor] 收到数据:', activityCount, 'activities');
+
+        // 检测活动数量变化
+        if (activityCount !== lastActivityCount) {
+          console.log('[Agent-Monitor] 检测到数据变化:', lastActivityCount, '->', activityCount);
+          lastActivityCount = activityCount;
+          
+          // 切换到快速模式
+          if (currentInterval !== POLL_CONFIG.fastInterval) {
+            switchToFastMode();
+          }
+        }
 
         updateAgents(data.agents || []);
         updateList(data.activities || []);
@@ -1124,6 +1148,33 @@ const HTML_PAGE = `<!DOCTYPE html>
       } catch (err) {
         console.error('[Agent-Monitor] 请求失败:', err.message);
       }
+    }
+
+    // 切换到快速轮询模式
+    function switchToFastMode() {
+      console.log('[Agent-Monitor] 切换到快速模式 (1秒)');
+      currentInterval = POLL_CONFIG.fastInterval;
+      
+      // 清除现有定时器
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      
+      // 设置新的快速轮询
+      intervalId = setInterval(poll, currentInterval);
+      
+      // 清除之前的恢复定时器
+      if (fastModeTimer) {
+        clearTimeout(fastModeTimer);
+      }
+      
+      // 10秒后恢复默认轮询
+      fastModeTimer = setTimeout(() => {
+        console.log('[Agent-Monitor] 恢复默认模式 (5秒)');
+        currentInterval = POLL_CONFIG.defaultInterval;
+        clearInterval(intervalId);
+        intervalId = setInterval(poll, currentInterval);
+      }, POLL_CONFIG.fastDuration);
     }
 
     // 更新系统监控面板
@@ -1154,9 +1205,9 @@ const HTML_PAGE = `<!DOCTYPE html>
     // 立即执行第一次
     poll();
 
-    // 每1秒轮询
-    const intervalId = setInterval(poll, 1000);
-    console.log('[Agent-Monitor] 轮询已启动, intervalId:', intervalId);
+    // 默认5秒轮询
+    intervalId = setInterval(poll, currentInterval);
+    console.log('[Agent-Monitor] 轮询已启动, 默认间隔: 5秒, intervalId:', intervalId);
   </script>
 </body>
 </html>`;
