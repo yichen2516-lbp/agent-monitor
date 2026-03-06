@@ -72,76 +72,116 @@ let systemStats = {
   updatedAt: null
 };
 
-// 获取 CPU 使用情况 (macOS)
-function getCPUStats() {
+// 检测操作系统平台
+const PLATFORM = os.platform();
+const IS_MACOS = PLATFORM === 'darwin';
+const IS_LINUX = PLATFORM === 'linux';
+
+// 异步执行命令（不阻塞）
+function execAsync(command, timeout = 5000) {
+  return new Promise((resolve) => {
+    try {
+      const result = execSync(command, { encoding: 'utf8', timeout });
+      resolve(result);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+// 获取 CPU 使用情况
+async function getCPUStats() {
   try {
-    // 使用 top 命令获取 CPU 使用率
-    const output = execSync('top -l 1 -n 0 | grep "CPU usage"', { encoding: 'utf8', timeout: 5000 });
-    // 格式: CPU usage: 12.34% user, 5.67% sys, 81.99% idle
-    const match = output.match(/(\d+\.?\d*)%\s*user.*?(\d+\.?\d*)%\s*sys.*?(\d+\.?\d*)%\s*idle/);
-    if (match) {
-      const user = parseFloat(match[1]) || 0;
-      const sys = parseFloat(match[2]) || 0;
-      const idle = parseFloat(match[3]) || 0;
-      const used = Math.round(user + sys);
-      return { used, user, sys, idle };
+    let output;
+    
+    if (IS_MACOS) {
+      // macOS: top -l 1 -n 0
+      output = await execAsync('top -l 1 -n 0 | grep "CPU usage"', 3000);
+      if (output) {
+        const match = output.match(/(\d+\.?\d*)%\s*user.*?(\d+\.?\d*)%\s*sys.*?(\d+\.?\d*)%\s*idle/);
+        if (match) {
+          const user = parseFloat(match[1]) || 0;
+          const sys = parseFloat(match[2]) || 0;
+          const idle = parseFloat(match[3]) || 0;
+          return { used: Math.round(user + sys), user, sys, idle };
+        }
+      }
+    } else if (IS_LINUX) {
+      // Linux: 读取 /proc/stat
+      const statOutput = await execAsync('cat /proc/stat | grep "^cpu "', 2000);
+      if (statOutput) {
+        const parts = statOutput.split(/\s+/);
+        if (parts.length >= 8) {
+          const user = parseFloat(parts[1]) || 0;
+          const nice = parseFloat(parts[2]) || 0;
+          const system = parseFloat(parts[3]) || 0;
+          const idle = parseFloat(parts[4]) || 0;
+          const iowait = parseFloat(parts[5]) || 0;
+          const total = user + nice + system + idle + iowait;
+          const used = user + nice + system;
+          const userPct = (user / total) * 100;
+          const sysPct = (system / total) * 100;
+          const usedPct = Math.round((used / total) * 100);
+          return { used: usedPct, user: userPct, sys: sysPct, idle: (idle / total) * 100 };
+        }
+      }
+      // 备用：使用 top -bn1
+      output = await execAsync('top -bn1 | grep "Cpu(s)"', 3000);
+      if (output) {
+        const match = output.match(/(\d+\.?\d*)%?\s*us.*?(\d+\.?\d*)%?\s*sy/);
+        if (match) {
+          const user = parseFloat(match[1]) || 0;
+          const sys = parseFloat(match[2]) || 0;
+          return { used: Math.round(user + sys), user, sys, idle: 100 - user - sys };
+        }
+      }
     }
   } catch (e) {
-    // 备用方案：使用 iostat
-    try {
-      const output = execSync('iostat -c 1', { encoding: 'utf8', timeout: 5000 });
-      const lines = output.trim().split('\n');
-      const lastLine = lines[lines.length - 1];
-      const parts = lastLine.split(/\s+/);
-      if (parts.length >= 3) {
-        const user = parseFloat(parts[0]) || 0;
-        const sys = parseFloat(parts[1]) || 0;
-        const used = Math.round(user + sys);
-        return { used, user, sys, idle: 100 - used };
-      }
-    } catch (e2) {
-      console.error('[Agent-Monitor] 获取 CPU 信息失败:', e2.message);
-    }
+    console.error('[Agent-Monitor] 获取 CPU 信息失败:', e.message);
   }
   return { used: 0, user: 0, sys: 0, idle: 100 };
 }
 
-// 获取 GPU 使用情况 (macOS)
-function getGPUStats() {
+// 获取 GPU 使用情况
+async function getGPUStats() {
   try {
-    // 方法1: 使用 ioreg 获取 GPU 信息
-    const output = execSync('ioreg -l | grep -E "(GPU|Metal|AGC|performanceStatistics)" | head -20', { encoding: 'utf8', timeout: 5000 });
-    
-    // 尝试解析 GPU 使用率
     let used = 0;
-    let name = 'Apple Silicon';
+    let name = 'GPU';
     
-    // 查找 GPU 活动百分比
-    const activityMatch = output.match(/"GPU Activity"[=:]\s*(\d+)/i) || 
-                         output.match(/gpuActivePercentage\s*=\s*(\d+)/i) ||
-                         output.match(/GPU\s*usage[:\s]*(\d+)%?/i);
-    if (activityMatch) {
-      used = parseInt(activityMatch[1]) || 0;
-    }
-    
-    // 查找 GPU 名称
-    const nameMatch = output.match(/"model"[=:]\s*"([^"]+)"/i) ||
-                     output.match(/"device_name"[=:]\s*"([^"]+)"/i);
-    if (nameMatch) {
-      name = nameMatch[1];
+    if (IS_MACOS) {
+      // macOS: ioreg
+      const output = await execAsync('ioreg -l | grep -E "(GPU|Metal|AGC)" | head -10', 3000);
+      if (output) {
+        const activityMatch = output.match(/"GPU Activity"[=:]\s*(\d+)/i) || 
+                             output.match(/gpuActivePercentage\s*=\s*(\d+)/i);
+        if (activityMatch) used = parseInt(activityMatch[1]) || 0;
+        
+        const nameMatch = output.match(/"model"[=:]\s*"([^"]+)"/i);
+        if (nameMatch) name = nameMatch[1];
+      }
+    } else if (IS_LINUX) {
+      // Linux: 尝试 nvidia-smi (NVIDIA)
+      const nvidiaOutput = await execAsync('nvidia-smi --query-gpu=utilization.gpu,name --format=csv,noheader,nounits 2>/dev/null', 3000);
+      if (nvidiaOutput) {
+        const parts = nvidiaOutput.split(',');
+        if (parts.length >= 2) {
+          used = parseInt(parts[0].trim()) || 0;
+          name = parts[1].trim();
+        }
+      } else {
+        // 尝试 intel_gpu_top (Intel)
+        const intelOutput = await execAsync('timeout 1 intel_gpu_top -l 1 2>/dev/null | grep -E "render|3D" | head -1', 3000);
+        if (intelOutput) {
+          const match = intelOutput.match(/(\d+\.?\d*)/);
+          if (match) used = parseFloat(match[1]) || 0;
+          name = 'Intel GPU';
+        }
+      }
     }
     
     return { used, name };
   } catch (e) {
-    // 备用方案: 使用 system_profiler
-    try {
-      const output = execSync('system_profiler SPDisplaysDataType | grep -E "(Chipset|VRAM|Metal)" | head -5', { encoding: 'utf8', timeout: 10000 });
-      const nameMatch = output.match(/Chipset Model:\s*(.+)/);
-      const name = nameMatch ? nameMatch[1].trim() : 'GPU';
-      return { used: 0, name };
-    } catch (e2) {
-      console.error('[Agent-Monitor] 获取 GPU 信息失败:', e2.message);
-    }
+    console.error('[Agent-Monitor] 获取 GPU 信息失败:', e.message);
   }
   return { used: 0, name: 'GPU' };
 }
@@ -153,8 +193,8 @@ function getMemoryStats() {
     const free = os.freemem();
     const used = total - free;
     return {
-      used: Math.round(used / 1024 / 1024 / 1024 * 100) / 100, // GB
-      total: Math.round(total / 1024 / 1024 / 1024 * 100) / 100, // GB
+      used: Math.round(used / 1024 / 1024 / 1024 * 100) / 100,
+      total: Math.round(total / 1024 / 1024 / 1024 * 100) / 100,
       percentage: Math.round((used / total) * 100)
     };
   } catch (e) {
@@ -163,22 +203,22 @@ function getMemoryStats() {
   }
 }
 
-// 获取磁盘使用情况 (macOS/Linux)
-function getDiskStats() {
+// 获取磁盘使用情况
+async function getDiskStats() {
   try {
-    const output = execSync('df -h /', { encoding: 'utf8', timeout: 5000 });
-    const lines = output.trim().split('\n');
-    if (lines.length >= 2) {
-      const parts = lines[1].split(/\s+/);
-      // 格式: Filesystem Size Used Avail Capacity iused ifree %iused  Mounted on
-      if (parts.length >= 5) {
-        const total = parts[1];
-        const used = parts[2];
-        const percentage = parseInt(parts[4].replace('%', '')) || 0;
-        // 转换为 GB 数值
-        const totalGB = parseFloat(total.replace(/[GT]/, '')) * (total.includes('T') ? 1024 : 1);
-        const usedGB = parseFloat(used.replace(/[GT]/, '')) * (used.includes('T') ? 1024 : 1);
-        return { used: Math.round(usedGB * 100) / 100, total: Math.round(totalGB * 100) / 100, percentage };
+    const output = await execAsync('df -h /', 3000);
+    if (output) {
+      const lines = output.trim().split('\n');
+      if (lines.length >= 2) {
+        const parts = lines[1].split(/\s+/);
+        if (parts.length >= 5) {
+          const total = parts[1];
+          const used = parts[2];
+          const percentage = parseInt(parts[4].replace('%', '')) || 0;
+          const totalGB = parseFloat(total.replace(/[GT]/, '')) * (total.includes('T') ? 1024 : 1);
+          const usedGB = parseFloat(used.replace(/[GT]/, '')) * (used.includes('T') ? 1024 : 1);
+          return { used: Math.round(usedGB * 100) / 100, total: Math.round(totalGB * 100) / 100, percentage };
+        }
       }
     }
   } catch (e) {
@@ -188,12 +228,14 @@ function getDiskStats() {
 }
 
 // 更新系统监控数据
-function updateSystemStats() {
+async function updateSystemStats() {
   try {
-    const cpu = getCPUStats();
-    const gpu = getGPUStats();
+    const [cpu, gpu, disk] = await Promise.all([
+      getCPUStats(),
+      getGPUStats(),
+      getDiskStats()
+    ]);
     const memory = getMemoryStats();
-    const disk = getDiskStats();
 
     systemStats = {
       cpu,

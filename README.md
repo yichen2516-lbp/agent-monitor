@@ -169,6 +169,13 @@ npm start
 
 ## Changelog
 
+### v1.5.1
+- 修复 Ubuntu/Linux 兼容性问题：
+  - 添加跨平台 CPU 检测（支持 Linux /proc/stat）
+  - 添加跨平台 GPU 检测（支持 nvidia-smi 和 Intel GPU）
+  - 改用异步命令执行，避免页面刷新阻塞
+  - 减少命令超时时间（3秒）
+
 ### v1.5.0
 - 新增系统资源监控栏：
   - CPU 使用率 (user/sys 细分)
