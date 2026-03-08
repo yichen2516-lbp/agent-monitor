@@ -1,85 +1,166 @@
-# Agent Monitor
+<div align="center">
 
-实时监控 OpenClaw Agent 运行状态的可视化工具。
+# 🤖 Agent Monitor
 
-![Status](https://img.shields.io/badge/status-active-green)
-![Version](https://img.shields.io/badge/version-1.5-blue)
+**Real-time monitoring dashboard for OpenClaw Agent activities**
 
-## 功能特性
+[![Status](https://img.shields.io/badge/status-active-success?style=flat-square)](https://github.com/yichen2516-lbp/agent-monitor)
+[![Version](https://img.shields.io/badge/version-1.5.2-blue?style=flat-square)](https://github.com/yichen2516-lbp/agent-monitor/releases)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?style=flat-square&logo=node.js)](https://nodejs.org/)
 
-- 🔴 **实时监控** - 追踪所有 Agent 的会话活动
-- 📝 **活动记录** - 显示工具调用、思考过程、回复内容
-- 🎨 **多 Agent 支持** - 自动识别并区分不同 Agent
-- ⏰ **Cron 监控** - 同时显示定时任务执行记录
-- 📊 **系统监控** - CPU / GPU / 内存 / 磁盘实时状态
-- 📱 **响应式设计** - 适配桌面和移动设备
-- 🌙 **深色主题** - 护眼设计，适合长时间监控
-- ⚡ **自动刷新** - 1 秒间隔实时更新
-- 🔍 **详细元数据** - 模型信息、Token消耗、执行时间、退出码
+[Live Demo](https://github.com/yichen2516-lbp/agent-monitor#) · [Report Bug](https://github.com/yichen2516-lbp/agent-monitor/issues) · [Request Feature](https://github.com/yichen2516-lbp/agent-monitor/issues)
 
-## 界面展示
+</div>
 
-### 系统监控栏
-顶部显示实时系统资源状态：
+---
+
+## 📋 Table of Contents
+
+- [About](#about)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+- [Usage](#usage)
+- [API Reference](#api-reference)
+- [Architecture](#architecture)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
+---
+
+## 🎯 About
+
+Agent Monitor is a lightweight, real-time dashboard for tracking OpenClaw Agent activities. It provides instant visibility into agent sessions, cron jobs, and system resources—all in a clean, dark-themed interface optimized for monitoring workflows.
+
+**Why Agent Monitor?**
+
+- 🔍 **Instant Visibility** — See what your agents are doing in real-time
+- 📊 **System Context** — Monitor CPU/GPU/Memory alongside agent activities
+- 🚀 **Zero Configuration** — Works out of the box with OpenClaw defaults
+- 📱 **Mobile Ready** — Check agent status from anywhere
+
+---
+
+## ✨ Features
+
+### Core Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| 🔴 **Real-time Monitoring** | Track all agent session activities with 1-second updates |
+| 📝 **Activity Logging** | View tool calls, thinking processes, and responses |
+| 🎭 **Multi-Agent Support** | Automatically detect and distinguish between agents |
+| ⏰ **Cron Monitoring** | Display scheduled task execution records |
+| 📊 **System Metrics** | Real-time CPU / GPU / Memory / Disk monitoring |
+| 🌙 **Dark Theme** | Eye-friendly design for extended monitoring sessions |
+| 🔍 **Rich Metadata** | Model info, token usage, execution time, exit codes |
+
+### Advanced Features
+
+- **Smart Polling** — Adaptive refresh rate (1s active / 5s idle) to reduce resource usage
+- **Session Isolation** — Separate storage for session and cron records
+- **Cross-Platform** — Works on macOS, Linux, and Windows
+- **Responsive Design** — Optimized for both desktop and mobile devices
+
+---
+
+## 📸 Screenshots
+
+<div align="center">
+
+*Dashboard showing real-time agent activities with system metrics*
+
 ```
-CPU: 15% GPU: 0% MEM: 97% DISK: 6%
+┌─────────────────────────────────────────────────────────────┐
+│  CPU: 15%  GPU: 0%  MEM: 97%  DISK: 6%                     │
+├─────────────────────────────────────────────────────────────┤
+│  [01:33:06]  main  abc123def                                │
+│  ├─ 🤔 Thinking: Planning response structure...            │
+│  ├─ 🔧 Tool: web_search "Agent Monitor GitHub"             │
+│  └─ [k2p5] [⚡ 13,202 tokens] [⏱️ 17ms] [Exit: 0]          │
+├─────────────────────────────────────────────────────────────┤
+│  [01:32:45]  cool  xyz789ghi                                │
+│  ├─ 🔧 Tool: exec "curl -s localhost:3457"                 │
+│  └─ [M2.5] [⚡ 2,341 tokens] [⏱️ 245ms] [Exit: 0]          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Agent 活动记录
-```
-[时间] [Agent名] [Session名] [Cron标签]
-├─ 活动内容（工具调用/思考/回复）
-└─ [模型] [Token消耗] [执行时间] [退出码]
-```
+</div>
 
-- **Session 名**: 8位字符，标识当前会话
-- **Cron 标签**: 紫色标识，仅定时任务显示
-- **模型**: 蓝色标签，如 `k2p5`, `M2.5`
-- **Token消耗**: 绿色标签，如 `⚡ 13,202 tokens`
-- **执行时间**: 黄色标签，如 `⏱️ 17ms`
-- **退出码**: 成功绿色/失败红色，如 `Exit: 0`
+---
 
-## 快速开始
+## 🚀 Getting Started
 
-### 安装
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) >= 18.0.0
+- [OpenClaw](https://github.com/openclaw/openclaw) installed and configured
+- (Optional) Git for cloning
+
+### Installation
+
+#### Option 1: Clone via HTTPS
 
 ```bash
-# 克隆项目
 git clone https://github.com/yichen2516-lbp/agent-monitor.git
 cd agent-monitor
-
-# 安装依赖
 npm install
 ```
 
-### 启动
+#### Option 2: Clone via SSH
 
 ```bash
-npm start
+git clone git@github.com:yichen2516-lbp/agent-monitor.git
+cd agent-monitor
+npm install
 ```
 
-服务将在 http://localhost:3450 启动。
-
-## 配置
-
-### 环境变量
+#### Option 3: Download ZIP
 
 ```bash
-# 设置 OpenClaw agents 目录
+curl -L https://github.com/yichen2516-lbp/agent-monitor/archive/refs/heads/main.zip -o agent-monitor.zip
+unzip agent-monitor.zip
+cd agent-monitor-main
+npm install
+```
+
+### Quick Start
+
+```bash
+# Start with default configuration
+npm start
+
+# Or with custom settings
 export AGENTS_DIR=/path/to/.openclaw/agents
-
-# 设置端口
 export PORT=3450
-
-# 设置最大活动记录数（默认 300）
-export MAX_ACTIVITIES=300
-
 npm start
 ```
 
-### 配置文件
+The dashboard will be available at `http://localhost:3450`.
 
-创建 `config.json`：
+---
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AGENTS_DIR` | `~/.openclaw/agents` | Path to OpenClaw agents directory |
+| `PORT` | `3450` | Server port |
+| `MAX_ACTIVITIES` | `300` | Maximum number of activities to retain |
+| `POLL_INTERVAL` | `10000` | File polling interval (ms) |
+| `REFRESH_INTERVAL` | `1000` | UI refresh interval (ms) |
+
+### Configuration File
+
+Create a `config.json` in the project root:
 
 ```json
 {
@@ -90,136 +171,217 @@ npm start
 }
 ```
 
-## API
+### Platform-Specific Setup
 
-### 获取状态
+<details>
+<summary><b>macOS</b></summary>
+
+```bash
+export AGENTS_DIR=/Users/$(whoami)/.openclaw/agents
+npm start
 ```
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+```bash
+export AGENTS_DIR=/home/$(whoami)/.openclaw/agents
+npm start
+```
+</details>
+
+<details>
+<summary><b>Windows (PowerShell)</b></summary>
+
+```powershell
+$env:AGENTS_DIR="$env:USERPROFILE\.openclaw\agents"
+npm start
+```
+</details>
+
+---
+
+## 📖 Usage
+
+### Dashboard Overview
+
+The main dashboard displays:
+
+1. **System Bar** — Real-time resource usage (CPU, GPU, Memory, Disk)
+2. **Activity Feed** — Chronological list of agent activities
+3. **Metadata Tags** — Model, tokens, execution time, exit code
+
+### Activity Indicators
+
+| Element | Meaning |
+|---------|---------|
+| `🤔 Thinking` | Agent is processing/thinking |
+| `🔧 Tool` | Tool invocation (read, exec, web_search, etc.) |
+| `💬 Reply` | Agent response |
+| `⏰ [cron]` | Scheduled task execution |
+| `[k2p5]` / `[M2.5]` | Model identifier |
+| `⚡ N tokens` | Token consumption |
+| `⏱️ Nms` | Execution duration |
+| `Exit: 0` / `Exit: 1` | Success / Failure |
+
+### Workspace Browser
+
+Navigate to `http://localhost:3450/workspace` to browse agent workspace files:
+
+- Multi-agent support (main, cool, tim)
+- Markdown rendering
+- Mobile-optimized interface
+
+---
+
+## 🔌 API Reference
+
+### Get Dashboard Data
+
+```http
 GET /api
 ```
 
-响应示例：
+**Response:**
+
 ```json
 {
   "agents": ["main", "edge", "cool", "tim"],
-  "activities": [...],
+  "activities": [
+    {
+      "agent": "main",
+      "session": "abc123def",
+      "type": "tool",
+      "tool": "web_search",
+      "model": "k2p5",
+      "tokens": 13202,
+      "duration": 17,
+      "exitCode": 0,
+      "timestamp": "2026-03-09T01:33:06.000Z"
+    }
+  ],
   "system": {
     "cpu": { "used": 15, "user": 3.5, "sys": 11.5 },
     "gpu": { "used": 0, "name": "Apple Silicon" },
     "memory": { "used": 7.8, "total": 8, "percentage": 97 },
     "disk": { "used": 10, "total": 233, "percentage": 6 }
   },
-  "updatedAt": "2026-03-05T15:30:00.000Z"
+  "updatedAt": "2026-03-09T01:33:06.000Z"
 }
 ```
 
-### 健康检查
-```
+### Health Check
+
+```http
 GET /health
 ```
 
-## 监控范围
+**Response:**
 
-### Session 记录
-监控路径：`~/.openclaw/agents/{agent}/sessions/*.jsonl`
-
-包括：
-- 工具调用（read/exec/edit/write/web_search等）
-- 思考过程（thinking）
-- 回复内容（reply）
-
-### Cron 记录
-监控路径：`~/.openclaw/cron/runs/*.jsonl`
-
-包括：
-- 定时任务执行结果
-- 执行时长
-- 成功/失败状态
-- 完整输出内容
-
-## 技术栈
-
-- **后端**: Node.js + Express
-- **前端**: 原生 JavaScript (无框架依赖)
-- **实时更新**: File System Watch API + 轮询
-
-## 系统要求
-
-- Node.js ≥ 18
-- OpenClaw 安装（用于读取 agent 会话和 cron 记录）
-
-## 跨平台
-
-### macOS
-```bash
-export AGENTS_DIR=/Users/username/.openclaw/agents
-npm start
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-03-09T01:33:06.000Z"
+}
 ```
-
-### Linux
-```bash
-export AGENTS_DIR=/home/username/.openclaw/agents
-npm start
-```
-
-### Windows (PowerShell)
-```powershell
-$env:AGENTS_DIR="C:\Users\username\.openclaw\agents"
-npm start
-```
-
-## Changelog
-
-### v1.5.2
-- 优化轮询逻辑：
-  - 默认5秒轮询（减少空闲时资源消耗）
-  - 检测到 jsonl 数据变化时自动切换到1秒轮询
-  - 10秒无变化后自动恢复到5秒轮询
-
-### v1.5.1
-- 修复 Ubuntu/Linux 兼容性问题：
-  - 添加跨平台 CPU 检测（支持 Linux /proc/stat）
-  - 添加跨平台 GPU 检测（支持 nvidia-smi 和 Intel GPU）
-  - 改用异步命令执行，避免页面刷新阻塞
-  - 减少命令超时时间（3秒）
-
-### v1.5.0
-- 新增系统资源监控栏：
-  - CPU 使用率 (user/sys 细分)
-  - GPU 使用率 (支持 Apple Silicon)
-  - 内存使用率
-  - 磁盘使用率
-- 紧凑单行布局显示系统状态
-
-### v1.4.0
-- 新增元数据显示：
-  - 模型信息（如 k2p5, M2.5）
-  - Token 消耗统计
-  - 工具执行时间
-  - 工具退出码（成功/失败状态）
-- 修复 thinking 内容显示
-- 修复 NaN tokens 问题
-
-### v1.3.3
-- Cron 内容不再截断，显示完整输出
-
-### v1.3.2
-- 添加 Session 名称显示
-- 添加 Cron 标签标识
-
-### v1.3.0
-- 添加 Cron 运行记录监控
-- Session 和 Cron 记录分离存储
-
-### v1.2.0
-- 跨平台默认路径支持
-- 配置系统（环境变量 + 配置文件）
-- 缓存控制修复
-- 局域网访问支持（0.0.0.0）
-
-## License
-
-MIT
 
 ---
 
-Built with ⚡ for OpenClaw
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Agent Monitor                          │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Frontend   │  │    Backend   │  │   Monitors   │      │
+│  │  (Vanilla JS)│  │   (Express)  │  │  (FS Watch)  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│         │                 │                 │              │
+│         └─────────────────┴─────────────────┘              │
+│                           │                                │
+│                    ┌──────┴──────┐                        │
+│                    │  OpenClaw   │                        │
+│                    │   Agents    │                        │
+│                    └─────────────┘                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Sources
+
+| Source | Path | Content |
+|--------|------|---------|
+| Sessions | `~/.openclaw/agents/{agent}/sessions/*.jsonl` | Agent conversation history |
+| Cron | `~/.openclaw/cron/runs/*.jsonl` | Scheduled task executions |
+| System | OS APIs | CPU, GPU, Memory, Disk metrics |
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] WebSocket support for true real-time updates
+- [ ] Historical data persistence and analytics
+- [ ] Alert notifications (webhook/email)
+- [ ] Multi-node monitoring support
+- [ ] REST API authentication
+- [ ] Plugin system for custom metrics
+
+See [open issues](https://github.com/yichen2516-lbp/agent-monitor/issues) for proposed features and known issues.
+
+---
+
+## 🤝 Contributing
+
+Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+### Development Setup
+
+```bash
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/agent-monitor.git
+cd agent-monitor
+
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev
+```
+
+### Pull Request Process
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+Please ensure your PR:
+- Follows the existing code style
+- Includes appropriate test coverage
+- Updates documentation if needed
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
+
+---
+
+## 🙏 Acknowledgments
+
+- Built for [OpenClaw](https://github.com/openclaw/openclaw) — the extensible AI agent platform
+- Inspired by the need for better visibility into multi-agent workflows
+- Thanks to all contributors and users who provided feedback
+
+---
+
+<div align="center">
+
+**[⬆ Back to Top](#agent-monitor)**
+
+Built with 🤖⚡ by LBP · Human supervision & snack supply: Yichen
+
+</div>
