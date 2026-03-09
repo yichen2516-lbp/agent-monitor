@@ -5,7 +5,7 @@
 **Real-time monitoring dashboard for OpenClaw Agent activities**
 
 [![Status](https://img.shields.io/badge/status-active-success?style=flat-square)](https://github.com/yichen2516-lbp/agent-monitor)
-[![Version](https://img.shields.io/badge/version-1.5.2-blue?style=flat-square)](https://github.com/yichen2516-lbp/agent-monitor/releases)
+[![Version](https://img.shields.io/badge/version-1.5.3-blue?style=flat-square)](https://github.com/yichen2516-lbp/agent-monitor/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?style=flat-square&logo=node.js)](https://nodejs.org/)
 
@@ -67,6 +67,7 @@ Agent Monitor is a lightweight, real-time dashboard for tracking OpenClaw Agent 
 - **Session Isolation** — Separate storage for session and cron records
 - **Cross-Platform** — Works on macOS, Linux, and Windows
 - **Responsive Design** — Optimized for both desktop and mobile devices
+- **Auto-Discovery** — Automatically detects agent workspaces without manual configuration
 
 ---
 
@@ -229,9 +230,19 @@ The main dashboard displays:
 
 Navigate to `http://localhost:3450/workspace` to browse agent workspace files:
 
-- Multi-agent support (main, cool, tim)
-- Markdown rendering
-- Mobile-optimized interface
+- **Auto-discovery** — Automatically detects all `workspace*` directories in `~/.openclaw/`
+- **Multi-agent support** — Dynamically adapts to any agent workspaces found (main, cool, tim, edge, etc.)
+- **Markdown rendering** — Syntax highlighting and formatting for `.md` files
+- **Mobile-optimized interface** — Responsive design for on-the-go monitoring
+
+**Auto-recognition mapping:**
+| Directory | Display Name | Emoji | Color |
+|-----------|--------------|-------|-------|
+| `workspace` | Main | ⚡ | Orange |
+| `workspace-cool` | Cool | ❄️ | Blue |
+| `workspace-tim` | Tim | ⏱️ | Green |
+| `workspace-edge` | Edge | 🔥 | Pink |
+| `workspace-*` | *Auto* | 🤖 | Gray |
 
 ---
 

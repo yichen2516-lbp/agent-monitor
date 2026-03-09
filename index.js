@@ -682,29 +682,77 @@ app.get('/health', (req, res) => {
 // Workspace Browser - 多 Agent 文件浏览器
 // ═════════════════════════════════════════════════════════════════════════════
 
-const WORKSPACE_AGENTS = {
-  main: {
-    name: 'LBP (Main)',
-    emoji: '⚡',
-    workspace: path.join(os.homedir(), '.openclaw/workspace'),
-    color: '#f7931a'
-  },
-  cool: {
-    name: 'COOL',
-    emoji: '❄️',
-    workspace: path.join(os.homedir(), '.openclaw/workspace-cool'),
-    color: '#58a6ff'
-  },
-  tim: {
-    name: 'TIM',
-    emoji: '⏱️',
-    workspace: path.join(os.homedir(), '.openclaw/workspace-tim'),
-    color: '#3fb950'
+// 动态扫描 ~/.openclaw/ 目录下的 workspace 文件夹
+function scanWorkspaces() {
+  const openclawDir = path.join(os.homedir(), '.openclaw');
+  const workspaces = {};
+
+  const agentColors = {
+    main: '#f7931a',
+    cool: '#58a6ff',
+    tim: '#3fb950',
+    edge: '#f778ba',
+    deep: '#58a6ff',
+    geek: '#a371f7'
+  };
+
+  const agentEmojis = {
+    main: '⚡',
+    cool: '❄️',
+    tim: '⏱️',
+    edge: '🔥',
+    deep: '🔧',
+    geek: '🤓'
+  };
+
+  try {
+    if (!fs.existsSync(openclawDir)) {
+      return workspaces;
+    }
+
+    const entries = fs.readdirSync(openclawDir);
+
+    for (const entry of entries) {
+      // 匹配 workspace 或 workspace-<name> 格式
+      if (!entry.startsWith('workspace')) continue;
+
+      const fullPath = path.join(openclawDir, entry);
+      const stat = fs.statSync(fullPath);
+      if (!stat.isDirectory()) continue;
+
+      // 提取 agent 名称
+      let agentKey = 'main';
+      let displayName = 'Main';
+
+      if (entry.includes('-')) {
+        agentKey = entry.replace('workspace-', '').toLowerCase();
+        displayName = agentKey.charAt(0).toUpperCase() + agentKey.slice(1);
+      }
+
+      workspaces[agentKey] = {
+        name: displayName,
+        emoji: agentEmojis[agentKey] || '🤖',
+        workspace: fullPath,
+        color: agentColors[agentKey] || '#8b949e'
+      };
+    }
+  } catch (e) {
+    console.error('[Workspace] 扫描工作区失败:', e.message);
   }
-};
+
+  return workspaces;
+}
+
+// 动态获取工作区配置
+function getWorkspaceAgents() {
+  return scanWorkspaces();
+}
+
+const WORKSPACE_AGENTS = getWorkspaceAgents();
 
 function getValidWorkspaceAgent(agent) {
-  return WORKSPACE_AGENTS[agent] ? agent : 'main';
+  const agents = getWorkspaceAgents();
+  return agents[agent] ? agent : 'main';
 }
 
 // 安全的文件路径检查
@@ -808,8 +856,9 @@ function generateWorkspaceTree(items, agent, level = 0) {
 
 // Workspace 主页面
 app.get('/workspace', (req, res) => {
+  const agents = getWorkspaceAgents();
   const agent = getValidWorkspaceAgent(req.query.agent || 'main');
-  const config = WORKSPACE_AGENTS[agent];
+  const config = agents[agent];
   const files = getFileList(config.workspace);
   const fileTree = generateWorkspaceTree(files, agent);
 
@@ -822,7 +871,7 @@ app.get('/workspace', (req, res) => {
   }
   count(files);
 
-  const agentTabs = Object.entries(WORKSPACE_AGENTS).map(([key, cfg]) => `
+  const agentTabs = Object.entries(agents).map(([key, cfg]) => `
     <a href="?agent=${key}" class="agent-tab ${key === agent ? 'active' : ''}" style="${key === agent ? `--color: ${cfg.color}` : ''}">
       <span>${cfg.emoji}</span>
       <span>${cfg.name}</span>
@@ -1223,8 +1272,9 @@ app.get('/workspace', (req, res) => {
 
 // Workspace 文件查看
 app.get('/workspace/view/*', (req, res) => {
+  const agents = getWorkspaceAgents();
   const agent = getValidWorkspaceAgent(req.query.agent || 'main');
-  const config = WORKSPACE_AGENTS[agent];
+  const config = agents[agent];
   const filePath = decodeURIComponent(req.params[0]);
   const fullPath = path.join(config.workspace, filePath);
 
