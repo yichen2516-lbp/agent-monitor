@@ -1586,6 +1586,15 @@ const HTML_PAGE = `<!DOCTYPE html>
     }
 
     .activity-item:hover { background: #1c2128; border-color: #58a6ff; }
+    .activity-item.error-item {
+      border-left: 3px solid #f85149 !important;
+      background: #2a1416;
+      border-color: #5a2a2d;
+    }
+    .activity-item.error-item:hover {
+      background: #34191c;
+      border-color: #f85149;
+    }
 
     /* Agent 颜色 */
     .activity-item.LBP { border-left: 3px solid #238636; }
@@ -1749,6 +1758,67 @@ const HTML_PAGE = `<!DOCTYPE html>
       display: inline-block;
     }
     .desc-toggle:hover { text-decoration: underline; }
+    .aggregate-badge {
+      margin-left: 8px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      background: #da363333;
+      border: 1px solid #da3633;
+      color: #f85149;
+      font-weight: 700;
+    }
+
+    .detail-drawer {
+      position: fixed;
+      top: 0;
+      right: -520px;
+      width: 520px;
+      height: 100vh;
+      background: #0d1117;
+      border-left: 1px solid #30363d;
+      box-shadow: -8px 0 20px rgba(0,0,0,0.35);
+      transition: right 0.2s ease;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+    }
+    .detail-drawer.open { right: 0; }
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid #30363d;
+      background: #161b22;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .detail-close {
+      cursor: pointer;
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    .detail-body {
+      padding: 12px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .detail-body pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px;
+      font-family: 'SF Mono', monospace;
+    }
 
     /* 新增：详细信息行 */
     .details-row {
@@ -1896,6 +1966,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         仅看异常
       </label>
       <button id="quick-error-mode" class="quick-btn">异常模式</button>
+      <button id="toggle-error-aggregate" class="quick-btn">错误聚合: 关</button>
       <button id="quick-reset-filters" class="quick-btn">重置筛选</button>
     </div>
 
@@ -1913,7 +1984,12 @@ const HTML_PAGE = `<!DOCTYPE html>
     const filterKeywordEl = document.getElementById('filter-keyword');
     const filterErrorsOnlyEl = document.getElementById('filter-errors-only');
     const quickErrorModeEl = document.getElementById('quick-error-mode');
+    const toggleErrorAggregateEl = document.getElementById('toggle-error-aggregate');
     const quickResetFiltersEl = document.getElementById('quick-reset-filters');
+
+    function getDetailDrawerEl() { return document.getElementById('detail-drawer'); }
+    function getDetailBodyEl() { return document.getElementById('detail-body'); }
+    function getDetailCloseEl() { return document.getElementById('detail-close'); }
 
     const metricActiveSessionsEl = document.getElementById('metric-active-sessions');
     const metricErrors5mEl = document.getElementById('metric-errors-5m');
@@ -1922,6 +1998,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     let latestActivities = [];
     const expandedItems = new Set();
+    let errorAggregateMode = false;
     let pollCount = 0;
 
     function formatTime(isoString) {
@@ -1949,6 +2026,28 @@ const HTML_PAGE = `<!DOCTYPE html>
       return [activity.timestamp, activity.agent, activity.sessionName, activity.type, activity.tool || '', activity.description || ''].join('|');
     }
 
+    function openDetail(activity) {
+      const detail = {
+        timestamp: activity.timestamp,
+        agent: activity.agent,
+        sessionName: activity.sessionName,
+        type: activity.type,
+        tool: activity.tool,
+        description: activity.description,
+        model: activity.model,
+        usage: activity.usage,
+        durationMs: activity.durationMs,
+        exitCode: activity.exitCode,
+        status: activity.status,
+        source: activity.source
+      };
+      const detailBodyEl = getDetailBodyEl();
+      const detailDrawerEl = getDetailDrawerEl();
+      if (!detailBodyEl || !detailDrawerEl) return;
+      detailBodyEl.innerHTML = '<pre>' + JSON.stringify(detail, null, 2) + '</pre>';
+      detailDrawerEl.classList.add('open');
+    }
+
     function createActivityItem(activity) {
       const div = document.createElement('div');
       const agentClass = (activity.agent || 'unknown').toUpperCase();
@@ -1956,6 +2055,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (activity.type === 'thinking') div.classList.add('thinking');
       if (activity.type === 'reply') div.classList.add('reply');
       if (activity.type === 'cron') div.classList.add('cron');
+      if (isErrorActivity(activity)) div.classList.add('error-item');
 
       const meta = document.createElement('div');
       meta.className = 'meta';
@@ -2057,6 +2157,14 @@ const HTML_PAGE = `<!DOCTYPE html>
         div.appendChild(detailsRow);
       }
 
+      if (activity.aggregateCount && activity.aggregateCount > 1) {
+        const badge = document.createElement('span');
+        badge.className = 'aggregate-badge';
+        badge.textContent = activity.aggregateCount + ' 次';
+        meta.appendChild(badge);
+      }
+
+      div.addEventListener('click', () => openDetail(activity));
       return div;
     }
 
@@ -2106,6 +2214,33 @@ const HTML_PAGE = `<!DOCTYPE html>
       });
     }
 
+    function aggregateErrorActivities(activities) {
+      if (!errorAggregateMode) return activities;
+      const groups = new Map();
+      const passthrough = [];
+
+      for (const a of activities) {
+        if (!isErrorActivity(a)) {
+          passthrough.push(a);
+          continue;
+        }
+        const key = [a.agent, a.type, a.tool || '', (a.description || '').slice(0, 120)].join('|');
+        if (!groups.has(key)) {
+          groups.set(key, { ...a, aggregateCount: 1, latestTs: new Date(a.timestamp).getTime() });
+        } else {
+          const g = groups.get(key);
+          g.aggregateCount += 1;
+          const t = new Date(a.timestamp).getTime();
+          if (t > g.latestTs) {
+            Object.assign(g, a, { aggregateCount: g.aggregateCount, latestTs: t });
+          }
+        }
+      }
+
+      const aggregatedErrors = Array.from(groups.values());
+      return [...passthrough, ...aggregatedErrors].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+
     function updateMetrics(allActivities, visibleActivities) {
       const now = Date.now();
       const fiveMinAgo = now - 5 * 60 * 1000;
@@ -2124,7 +2259,8 @@ const HTML_PAGE = `<!DOCTYPE html>
     }
 
     function renderFilteredList() {
-      const visible = applyFilters(latestActivities);
+      const filtered = applyFilters(latestActivities);
+      const visible = aggregateErrorActivities(filtered);
       listEl.innerHTML = '';
 
       console.log('[Agent-Monitor] 更新列表:', visible.length, '/', latestActivities.length, 'activities');
@@ -2257,12 +2393,27 @@ const HTML_PAGE = `<!DOCTYPE html>
       renderFilteredList();
     });
 
+    toggleErrorAggregateEl.addEventListener('click', () => {
+      errorAggregateMode = !errorAggregateMode;
+      toggleErrorAggregateEl.textContent = '错误聚合: ' + (errorAggregateMode ? '开' : '关');
+      renderFilteredList();
+    });
+
     quickResetFiltersEl.addEventListener('click', () => {
       filterAgentEl.value = 'all';
       filterTypeEl.value = 'all';
       filterKeywordEl.value = '';
       filterErrorsOnlyEl.checked = false;
+      errorAggregateMode = false;
+      toggleErrorAggregateEl.textContent = '错误聚合: 关';
       renderFilteredList();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'detail-close') {
+        const detailDrawerEl = getDetailDrawerEl();
+        detailDrawerEl?.classList.remove('open');
+      }
     });
 
     // 立即执行第一次
@@ -2272,6 +2423,14 @@ const HTML_PAGE = `<!DOCTYPE html>
     intervalId = setInterval(poll, currentInterval);
     console.log('[Agent-Monitor] 轮询已启动, 默认间隔: 5秒, intervalId:', intervalId);
   </script>
+
+  <aside id="detail-drawer" class="detail-drawer">
+    <div class="detail-header">
+      <span>事件详情</span>
+      <button id="detail-close" class="detail-close">关闭</button>
+    </div>
+    <div id="detail-body" class="detail-body">点击任意事件查看详情</div>
+  </aside>
 </body>
 </html>`;
 
