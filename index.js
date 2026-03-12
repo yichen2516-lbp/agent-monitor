@@ -58,10 +58,11 @@ function getDefaultAgentsDir() {
 // 配置 (优先级: 环境变量 > 配置文件 > 默认)
 const CONFIG = {
   agentsDir: process.env.AGENTS_DIR || fileConfig.agentsDir || getDefaultAgentsDir(),
-  maxActivities: process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 300,
-  pollInterval: process.env.POLL_INTERVAL || fileConfig.pollInterval || 10000,
-  refreshInterval: process.env.REFRESH_INTERVAL || fileConfig.refreshInterval || 1000,
-  logRetentionDays: Number(process.env.LOG_RETENTION_DAYS || fileConfig.logRetentionDays || 3)
+  maxActivities: Number(process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 300),
+  pollInterval: Number(process.env.POLL_INTERVAL || fileConfig.pollInterval || 10000),
+  refreshInterval: Number(process.env.REFRESH_INTERVAL || fileConfig.refreshInterval || 1000),
+  logRetentionDays: Number(process.env.LOG_RETENTION_DAYS || fileConfig.logRetentionDays || 3),
+  activityMaxAgeHours: Number(process.env.ACTIVITY_MAX_AGE_HOURS || fileConfig.activityMaxAgeHours || 24)
 };
 
 console.log('[Agent-Monitor] Agents 目录:', CONFIG.agentsDir);
@@ -123,12 +124,7 @@ function cleanupOldLogs() {
 cleanupOldLogs();
 setInterval(cleanupOldLogs, 6 * 60 * 60 * 1000);
 
-// 状态
-let recentActivities = [];
-let cronActivities = [];
-let activeSessions = new Map();
-// 用于存储 toolCall 和 toolResult 的关联信息
-let pendingToolCalls = new Map();
+// Monitor store moved to ./server/monitor-store
 
 // API 观测指标
 const apiMetrics = {
@@ -141,418 +137,8 @@ const apiMetrics = {
 startSystemStatsPolling(2000);
 
 // 获取所有 agent 的最新会话文件
-function getAllSessions() {
-  const sessions = [];
-
-  try {
-    if (!fs.existsSync(CONFIG.agentsDir)) {
-      console.error('[Agent-Monitor] Agents 目录不存在:', CONFIG.agentsDir);
-      return sessions;
-    }
-
-    const agents = fs.readdirSync(CONFIG.agentsDir)
-      .filter(name => !name.startsWith('.'));
-
-    for (const agent of agents) {
-      const sessionsDir = path.join(CONFIG.agentsDir, agent, 'sessions');
-      if (!fs.existsSync(sessionsDir)) continue;
-
-      const files = fs.readdirSync(sessionsDir)
-        .filter(f => f.endsWith('.jsonl') && !f.includes('.deleted'))
-        .map(f => {
-          const fullPath = path.join(sessionsDir, f);
-          const stats = fs.statSync(fullPath);
-          return {
-            agent,
-            name: f,
-            path: fullPath,
-            size: stats.size,
-            mtime: stats.mtime,
-            source: 'session'
-          };
-        })
-        .sort((a, b) => b.mtime - a.mtime);
-
-      if (files.length > 0) {
-        sessions.push(files[0]);
-      }
-    }
-  } catch (e) {
-    console.error('[Agent-Monitor] 读取失败:', e.message);
-  }
-
-  return sessions;
-}
-
-// 获取所有 cron 运行记录文件
-function getCronRuns() {
-  const cronRuns = [];
-  const cronDir = path.join(os.homedir(), '.openclaw', 'cron', 'runs');
-
-  try {
-    if (!fs.existsSync(cronDir)) {
-      return cronRuns;
-    }
-
-    const files = fs.readdirSync(cronDir)
-      .filter(f => f.endsWith('.jsonl'))
-      .map(f => {
-        const fullPath = path.join(cronDir, f);
-        const stats = fs.statSync(fullPath);
-        return {
-          agent: 'cron',
-          name: f,
-          path: fullPath,
-          size: stats.size,
-          mtime: stats.mtime,
-          source: 'cron'
-        };
-      })
-      .sort((a, b) => b.mtime - a.mtime);
-
-    // 只取最新的5个cron文件（避免太多历史数据）
-    return files.slice(0, 5);
-  } catch (e) {
-    console.error('[Agent-Monitor] 读取 cron 目录失败:', e.message);
-  }
-
-  return cronRuns;
-}
-
-// 解析单行活动
-function parseActivityLine(line, agentName, sessionName) {
-  try {
-    const data = JSON.parse(line);
-    if (!data.timestamp) return null;
-
-    const baseTimestamp = new Date(data.timestamp).getTime();
-    const activities = [];
-
-    // 处理 toolResult - 存储以便后续 toolCall 关联
-    if (data.type === 'message' && data.message?.role === 'toolResult') {
-      const toolCallId = data.message.toolCallId;
-      const details = data.message.details || {};
-      if (toolCallId) {
-        pendingToolCalls.set(toolCallId, {
-          durationMs: details.durationMs,
-          exitCode: details.exitCode,
-          status: details.status,
-          isError: data.message.isError
-        });
-        // 清理旧的 pendingToolCalls（保留最近100个）
-        if (pendingToolCalls.size > 100) {
-          const firstKey = pendingToolCalls.keys().next().value;
-          pendingToolCalls.delete(firstKey);
-        }
-      }
-      return null; // toolResult 不直接显示
-    }
-
-    if (data.type === 'message' && data.message?.role === 'assistant') {
-      const content = data.message.content || [];
-      
-      // 提取模型和 usage 信息
-      const model = data.model || data.message.model;
-      const provider = data.provider || data.message.provider;
-      const usage = data.usage;
-      const stopReason = data.stopReason;
-
-      content.forEach((item, index) => {
-        const itemTimestamp = new Date(baseTimestamp + index * 10);
-
-        if (item.type === 'toolCall') {
-          const toolName = item.name || 'unknown';
-          const args = item.arguments || {};
-          const toolCallId = item.id;
-
-          let description = '';
-          const toolMap = {
-            'read': () => `📄 read    ${args.file_path || args.path || 'unknown'}`,
-            'exec': () => `🔍 exec    ${args.command || ''}`,
-            'edit': () => `✏️  edit    ${args.file_path || args.path || 'unknown'}`,
-            'write': () => `📝 write   ${args.file_path || args.path || 'unknown'}`,
-            'web_search': () => `🌐 search  ${args.query || ''}`,
-            'web_fetch': () => `🌐 fetch   ${args.url || ''}`,
-            'message': () => `💬 message ${args.action || ''}`,
-            'sessions_send': () => `📨 send    ${args.sessionKey || ''}`,
-            'sessions_spawn': () => `🚀 spawn   ${args.agentId || ''}`,
-            'subagents': () => `👥 subagents ${args.action || ''}`,
-            'image': () => `🖼️  image   ${args.prompt || ''}`,
-            'pdf': () => `📄 pdf     ${args.prompt || ''}`,
-            'process': () => `⚙️  process ${args.action || ''}`,
-            'browser': () => `🌐 browser ${args.action || ''}`
-          };
-
-          description = toolMap[toolName] ? toolMap[toolName]() : `⚙️  ${toolName}`;
-
-          // 尝试获取关联的 toolResult 信息
-          const toolResult = toolCallId ? pendingToolCalls.get(toolCallId) : null;
-
-          activities.push({
-            type: 'tool',
-            agent: agentName,
-            sessionName: sessionName,
-            tool: toolName,
-            description,
-            timestamp: itemTimestamp.toISOString(),
-            // 新增元数据
-            model: model,
-            provider: provider,
-            usage: usage,
-            stopReason: stopReason,
-            durationMs: toolResult?.durationMs,
-            exitCode: toolResult?.exitCode,
-            toolStatus: toolResult?.status,
-            toolError: toolResult?.isError
-          });
-        }
-
-        if (item.type === 'thinking') {
-          const thinkingText = item.thinking || '';
-          activities.push({
-            type: 'thinking',
-            agent: agentName,
-            sessionName: sessionName,
-            description: `💭 ${thinkingText}`,
-            timestamp: itemTimestamp.toISOString(),
-            // 新增元数据
-            model: model,
-            provider: provider,
-            usage: usage,
-            stopReason: stopReason
-          });
-        }
-
-        if (item.type === 'text' && item.text) {
-          activities.push({
-            type: 'reply',
-            agent: agentName,
-            sessionName: sessionName,
-            description: `💬 ${item.text}`,
-            timestamp: itemTimestamp.toISOString(),
-            fullText: item.text,
-            // 新增元数据
-            model: model,
-            provider: provider,
-            usage: usage,
-            stopReason: stopReason
-          });
-        }
-      });
-    }
-
-    return activities;
-  } catch (e) {
-    return null;
-  }
-}
-
-// 解析 cron 运行记录行
-function parseCronLine(line) {
-  try {
-    const data = JSON.parse(line);
-    if (!data.ts) return null;
-
-    const timestamp = new Date(data.ts).toISOString();
-    const status = data.status || 'unknown';
-    const summary = data.summary || '';
-    const error = data.error || '';
-    const duration = data.durationMs ? `(${Math.round(data.durationMs / 1000)}s)` : '';
-    const durationMs = data.durationMs;
-    const usage = data.usage;
-
-    // 从 sessionKey 中提取 agent 名称和 session ID
-    let agentName = 'cron';
-    let sessionName = '';
-    if (data.sessionKey) {
-      const match = data.sessionKey.match(/agent:([^:]+):/);
-      if (match) agentName = match[1];
-      const sessionMatch = data.sessionKey.match(/:run:([^:]+)/);
-      if (sessionMatch) sessionName = sessionMatch[1].slice(0, 8);
-    }
-
-    const statusEmoji = status === 'ok' ? '✅' : status === 'error' ? '❌' : '⏳';
-    const description = `${statusEmoji} ${duration} ${summary}`;
-
-    return [{
-      type: 'cron',
-      agent: agentName,
-      sessionName: sessionName || 'cron',
-      tool: 'cron',
-      description,
-      timestamp,
-      status,
-      fullSummary: summary,
-      error: error,
-      durationMs: durationMs,
-      usage: usage
-    }];
-  } catch (e) {
-    return null;
-  }
-}
-
-// 加载会话文件
-function loadSessionFile(sessionInfo) {
-  const { agent, path: filePath, source, name } = sessionInfo;
-
-  try {
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split('\n').filter(l => l.trim());
-
-    // 提取 session 名称（从文件名）
-    const sessionName = name ? name.replace('.jsonl', '').slice(0, 8) : '';
-
-    for (const line of lines) {
-      let activities;
-      if (source === 'cron') {
-        activities = parseCronLine(line);
-      } else {
-        activities = parseActivityLine(line, agent, sessionName);
-      }
-      if (activities) {
-        if (source === 'cron') {
-          cronActivities.push(...activities.map(a => ({ ...a, source: filePath })));
-        } else {
-          recentActivities.push(...activities.map(a => ({ ...a, source: filePath })));
-        }
-      }
-    }
-
-    // 分别限制数量
-    if (recentActivities.length > CONFIG.maxActivities) {
-      recentActivities = recentActivities.slice(-CONFIG.maxActivities);
-    }
-    if (cronActivities.length > 50) {  // cron 只保留最近 50 条
-      cronActivities = cronActivities.slice(-50);
-    }
-
-    console.log(`[Agent-Monitor] 加载 ${source === 'cron' ? 'cron' : agent}: ${path.basename(filePath)} (${lines.length} 行)`);
-
-    return fs.statSync(filePath).size;
-  } catch (e) {
-    console.error(`[Agent-Monitor] 加载失败 ${agent}:`, e.message);
-    return 0;
-  }
-}
-
-// 监控会话文件
-function watchSession(sessionInfo) {
-  const { agent, path: filePath } = sessionInfo;
-
-  // Close旧监控
-  if (activeSessions.has(agent)) {
-    const old = activeSessions.get(agent);
-    if (old.watcher) old.watcher.close();
-  }
-
-  const lastSize = loadSessionFile(sessionInfo);
-
-  // 提取 session 名称
-  const sessionName = sessionInfo.name ? sessionInfo.name.replace('.jsonl', '').slice(0, 8) : '';
-
-  const watcher = fs.watch(filePath, (eventType) => {
-    if (eventType !== 'change') return;
-
-    try {
-      const stats = fs.statSync(filePath);
-      const session = activeSessions.get(agent);
-      if (!session || stats.size <= session.lastSize) return;
-
-      const fd = fs.openSync(filePath, 'r');
-      const buffer = Buffer.alloc(stats.size - session.lastSize);
-      fs.readSync(fd, buffer, 0, buffer.length, session.lastSize);
-      fs.closeSync(fd);
-
-      const newLines = buffer.toString('utf8').split('\n').filter(l => l.trim());
-
-      for (const line of newLines) {
-        const activities = parseActivityLine(line, agent, sessionName);
-        if (activities) {
-          for (const activity of activities) {
-            recentActivities.push(activity);
-            if (recentActivities.length > CONFIG.maxActivities) {
-              recentActivities.shift();
-            }
-          }
-        }
-      }
-
-      session.lastSize = stats.size;
-    } catch (err) {
-      console.error(`[Agent-Monitor] 监控错误 ${agent}:`, err.message);
-    }
-  });
-
-  activeSessions.set(agent, { file: filePath, watcher, lastSize, sessionName });
-}
-
-// 初始化所有 agent
-function init() {
-  const sessions = getAllSessions();
-  const cronRuns = getCronRuns();
-
-  for (const session of sessions) {
-    watchSession(session);
-  }
-
-  // 加载 cron 数据（只加载，不监控文件变化）
-  for (const cronRun of cronRuns) {
-    loadSessionFile(cronRun);
-  }
-
-  if (sessions.length === 0 && cronRuns.length === 0) {
-    console.log('[Agent-Monitor] 未找到任何会话文件，等待中...');
-  }
-
-  // 每10秒检查新会话
-  setInterval(() => {
-    const sessions = getAllSessions();
-
-    for (const session of sessions) {
-      const existing = activeSessions.get(session.agent);
-
-      if (!existing) {
-        console.log(`[Agent-Monitor] 发现新 agent: ${session.agent}`);
-        watchSession(session);
-      } else if (existing.file !== session.path) {
-        console.log(`[Agent-Monitor] ${session.agent} 新会话: ${session.name}`);
-        watchSession(session);
-      }
-    }
-
-    // 定期刷新 cron 数据（每10秒检查一次）
-    const newCronRuns = getCronRuns();
-    for (const cronRun of newCronRuns) {
-      loadSessionFile(cronRun);
-    }
-  }, CONFIG.pollInterval);
-}
-
-// 获取状态
-function getStatus(since = null) {
-  // 合并 session 和 cron 记录
-  const allActivities = [...recentActivities, ...cronActivities];
-  let sorted = allActivities
-    .slice()
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-  if (since) {
-    const sinceMs = new Date(since).getTime();
-    if (!isNaN(sinceMs)) {
-      sorted = sorted.filter(a => new Date(a.timestamp).getTime() > sinceMs);
-    }
-  }
-
-  sorted = sorted.slice(0, CONFIG.maxActivities);
-
-  return {
-    agents: Array.from(activeSessions.keys()),
-    activities: sorted,
-    system: getSystemStats(),
-    updatedAt: new Date().toISOString()
-  };
-}
+const { createMonitorStore } = require('./server/monitor-store');
+const monitorStore = createMonitorStore({ CONFIG, getSystemStats });
 
 // 路由
 app.get('/', (req, res) => {
@@ -569,7 +155,7 @@ app.get('/api', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Content-Type', 'application/json');
 
-  const payload = getStatus(since);
+  const payload = monitorStore.getStatus(since);
   res.json(payload);
 
   const latency = Date.now() - start;
@@ -587,7 +173,7 @@ app.get('/api', (req, res) => {
 
 // 健康检查
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', agents: activeSessions.size });
+  res.json({ status: 'ok', agents: monitorStore.getActiveSessionsCount() });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1240,7 +826,7 @@ app.get('/workspace/view/*', (req, res) => {
 const HTML_PAGE = fs.readFileSync(path.join(__dirname, 'views/monitor.html'), 'utf8');
 
 // 启动
-init();
+monitorStore.init();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`

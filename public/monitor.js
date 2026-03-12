@@ -19,7 +19,6 @@
     const metricVisibleEl = document.getElementById('metric-visible');
 
     let latestActivities = [];
-    const expandedItems = new Set();
     let errorAggregateMode = false;
     let pollCount = 0;
     let lastRenderedSignature = '';
@@ -190,30 +189,6 @@
       div.appendChild(meta);
       div.appendChild(desc);
 
-      if (fullDesc.length > 180 || fullDesc.split('\\n').length > 3) {
-        const activityKey = getActivityKey(activity);
-        const isExpanded = expandedItems.has(activityKey);
-
-        if (!isExpanded) {
-          desc.classList.add('collapsed');
-        }
-
-        const toggle = document.createElement('span');
-        toggle.className = 'desc-toggle';
-        toggle.textContent = isExpanded ? 'Collapse' : 'Expand';
-        toggle.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const collapsed = desc.classList.toggle('collapsed');
-          const expanded = !collapsed;
-          if (expanded) {
-            expandedItems.add(activityKey);
-          } else {
-            expandedItems.delete(activityKey);
-          }
-          toggle.textContent = collapsed ? 'Expand' : 'Collapse';
-        });
-        div.appendChild(toggle);
-      }
 
       // 新增：详细信息行（模型、token、执行时间、退出码）
       const detailsRow = document.createElement('div');
