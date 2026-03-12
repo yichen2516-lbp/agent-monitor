@@ -51,10 +51,68 @@ const CONFIG = {
   agentsDir: process.env.AGENTS_DIR || fileConfig.agentsDir || getDefaultAgentsDir(),
   maxActivities: process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 300,
   pollInterval: process.env.POLL_INTERVAL || fileConfig.pollInterval || 10000,
-  refreshInterval: process.env.REFRESH_INTERVAL || fileConfig.refreshInterval || 1000
+  refreshInterval: process.env.REFRESH_INTERVAL || fileConfig.refreshInterval || 1000,
+  logRetentionDays: Number(process.env.LOG_RETENTION_DAYS || fileConfig.logRetentionDays || 3)
 };
 
 console.log('[Agent-Monitor] Agents 目录:', CONFIG.agentsDir);
+
+// 日志（按天滚动 + 自动清理）
+const LOG_DIR = path.join(__dirname, 'logs');
+
+function ensureLogDir() {
+  try {
+    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+  } catch (e) {
+    console.error('[Agent-Monitor] 创建日志目录失败:', e.message);
+  }
+}
+
+function getDailyLogFileName(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `agent-monitor-${y}-${m}-${d}.log`;
+}
+
+function writeRollingLog(level, message) {
+  try {
+    ensureLogDir();
+    const line = `[${new Date().toISOString()}] [${level}] ${message}
+`;
+    const filePath = path.join(LOG_DIR, getDailyLogFileName());
+    fs.appendFileSync(filePath, line, 'utf8');
+  } catch (e) {
+    console.error('[Agent-Monitor] 写日志失败:', e.message);
+  }
+}
+
+function cleanupOldLogs() {
+  try {
+    ensureLogDir();
+    const files = fs.readdirSync(LOG_DIR)
+      .filter(f => /^agent-monitor-\d{4}-\d{2}-\d{2}\.log$/.test(f));
+
+    const now = Date.now();
+    const keepMs = Math.max(1, CONFIG.logRetentionDays) * 24 * 60 * 60 * 1000;
+
+    for (const file of files) {
+      const match = file.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (!match) continue;
+      const ts = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`).getTime();
+      if (isNaN(ts)) continue;
+      if (now - ts > keepMs) {
+        fs.unlinkSync(path.join(LOG_DIR, file));
+      }
+    }
+  } catch (e) {
+    console.error('[Agent-Monitor] 清理旧日志失败:', e.message);
+  }
+}
+
+// 启动时清理一次，运行中每 6 小时清理一次
+cleanupOldLogs();
+setInterval(cleanupOldLogs, 6 * 60 * 60 * 1000);
 
 // 状态
 let recentActivities = [];
@@ -62,6 +120,13 @@ let cronActivities = [];
 let activeSessions = new Map();
 // 用于存储 toolCall 和 toolResult 的关联信息
 let pendingToolCalls = new Map();
+
+// API 观测指标
+const apiMetrics = {
+  total: 0,
+  sinceRequests: 0,
+  totalLatencyMs: 0
+};
 
 // 系统监控状态
 let systemStats = {
@@ -676,9 +741,26 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api', (req, res) => {
+  const start = Date.now();
+  const since = req.query.since || null;
+
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Content-Type', 'application/json');
-  res.json(getStatus(req.query.since || null));
+
+  const payload = getStatus(since);
+  res.json(payload);
+
+  const latency = Date.now() - start;
+  apiMetrics.total += 1;
+  if (since) apiMetrics.sinceRequests += 1;
+  apiMetrics.totalLatencyMs += latency;
+
+  const avgLatency = (apiMetrics.totalLatencyMs / apiMetrics.total).toFixed(1);
+  const sinceHitRate = ((apiMetrics.sinceRequests / apiMetrics.total) * 100).toFixed(1);
+
+  const apiLog = `[Agent-Monitor][API] /api latency=${latency}ms avg=${avgLatency}ms count=${payload.activities.length} since=${since ? 'yes' : 'no'} sinceHitRate=${sinceHitRate}% total=${apiMetrics.total}`;
+  console.log(apiLog);
+  writeRollingLog('INFO', apiLog);
 });
 
 // 健康检查

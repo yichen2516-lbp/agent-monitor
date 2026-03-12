@@ -161,6 +161,7 @@ The dashboard will be available at `http://localhost:3450`.
 | `MAX_ACTIVITIES` | `300` | Maximum number of activities to retain |
 | `POLL_INTERVAL` | `10000` | File polling interval (ms) |
 | `REFRESH_INTERVAL` | `1000` | UI refresh interval (ms) |
+| `LOG_RETENTION_DAYS` | `3` | Rolling log retention (days) for `./logs/agent-monitor-YYYY-MM-DD.log` |
 
 ### Configuration File
 
