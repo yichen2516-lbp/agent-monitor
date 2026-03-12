@@ -53,13 +53,16 @@ Agent Monitor is a lightweight, real-time dashboard for tracking OpenClaw Agent 
 
 | Feature | Description |
 |---------|-------------|
-| 🔴 **Real-time Monitoring** | Track all agent session activities with 1-second updates |
+| 🔴 **Real-time Monitoring** | Track all agent session activities with adaptive 1s/5s polling |
 | 📝 **Activity Logging** | View tool calls, thinking processes, and responses |
 | 🎭 **Multi-Agent Support** | Automatically detect and distinguish between agents |
 | ⏰ **Cron Monitoring** | Display scheduled task execution records |
 | 📊 **System Metrics** | Real-time CPU / GPU / Memory / Disk monitoring |
 | 🌙 **Dark Theme** | Eye-friendly design for extended monitoring sessions |
 | 🔍 **Rich Metadata** | Model info, token usage, execution time, exit codes |
+| 🧭 **Filter & Error-First Workflow** | Filter by agent/type/keyword, focus on errors, aggregate repeated failures |
+| 📌 **Persistent UI State** | Preserve filters and error-view options across page refresh |
+| 🗂️ **Detail Drawer** | Click any activity to inspect structured event details |
 
 ### Advanced Features
 
@@ -210,8 +213,11 @@ npm start
 The main dashboard displays:
 
 1. **System Bar** — Real-time resource usage (CPU, GPU, Memory, Disk)
-2. **Activity Feed** — Chronological list of agent activities
-3. **Metadata Tags** — Model, tokens, execution time, exit code
+2. **Summary Cards** — Active sessions, 5-minute error count, slow calls, visible items
+3. **Filter Bar** — Agent/type/keyword filters, error-only mode, error aggregation toggle
+4. **Activity Feed** — Chronological list of agent activities
+5. **Metadata Tags** — Model, tokens, execution time, exit code
+6. **Detail Drawer** — Click an item to inspect structured event fields
 
 ### Activity Indicators
 
@@ -254,6 +260,12 @@ Navigate to `http://localhost:3450/workspace` to browse agent workspace files:
 GET /api
 ```
 
+**Query Parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `since` | ISO datetime (optional) | Return activities newer than this timestamp (incremental polling support) |
+
 **Response:**
 
 ```json
@@ -293,7 +305,7 @@ GET /health
 ```json
 {
   "status": "ok",
-  "timestamp": "2026-03-09T01:33:06.000Z"
+  "agents": 3
 }
 ```
 
@@ -372,6 +384,7 @@ Please ensure your PR:
 - Follows the existing code style
 - Includes appropriate test coverage
 - Updates documentation if needed
+- Passes core regression checks in [`REGRESSION_CHECKLIST.md`](./REGRESSION_CHECKLIST.md)
 
 ---
 
