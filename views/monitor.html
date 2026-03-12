@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Agent Monitor v1.4 - OpenClaw Live Status</title>
+  <!-- v1.4: added model, token usage, duration, exit code -->
+    <link rel="stylesheet" href="/public/monitor.css">
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-code" id="bg-code"></div>
+  <div class="bg-vig"></div>
+
+  <div class="container hud-grid">
+    <aside class="hud-left">
+      <section class="hud-panel">
+        <div class="header">
+          <div class="status-dot"></div>
+          <h1>⚡ Agent Monitor</h1>
+          <div class="nav-links">
+            <a href="/workspace">📂 Workspace</a>
+          </div>
+          <div class="agents-list" id="agents-list"></div>
+        </div>
+      </section>
+
+      <section class="hud-panel">
+        <!-- 系统监控面板 -->
+        <div class="system-panel" id="system-panel">
+          <div class="system-item">
+            <span class="system-label">CPU:</span>
+            <span class="system-value-inline" id="cpu-value">--</span>
+          </div>
+          <div class="system-item">
+            <span class="system-label">GPU:</span>
+            <span class="system-value-inline" id="gpu-value">--</span>
+          </div>
+          <div class="system-item">
+            <span class="system-label">MEM:</span>
+            <span class="system-value-inline" id="mem-value">--</span>
+          </div>
+          <div class="system-item">
+            <span class="system-label">DISK:</span>
+            <span class="system-value-inline" id="disk-value">--</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="hud-panel metrics-panel">
+        <div class="summary-cards">
+          <div class="summary-card">
+            <div class="label">Active Sessions</div>
+            <div class="value" id="metric-active-sessions">--</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Errors / 5m</div>
+            <div class="value" id="metric-errors-5m">--</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Slow Calls (>3s)</div>
+            <div class="value" id="metric-slow-calls">--</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Visible Items</div>
+            <div class="value" id="metric-visible">--</div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="hud-right">
+      <section class="hud-panel hud-feed">
+        <div class="feed-title">* REALTIME ACTIVITY FEED <span class="cursor"></span></div>
+        <div class="filters">
+          <select id="filter-agent" class="filter-select">
+            <option value="all">All Agents</option>
+          </select>
+          <select id="filter-type" class="filter-select">
+            <option value="all">All Types</option>
+            <option value="tool">tool</option>
+            <option value="reply">reply</option>
+            <option value="thinking">thinking</option>
+            <option value="cron">cron</option>
+          </select>
+          <input id="filter-keyword" class="filter-input" placeholder="Search keyword (description / tool / session)" />
+          <label class="filter-check">
+            <input type="checkbox" id="filter-errors-only" />
+            Errors Only
+          </label>
+          <button id="toggle-error-aggregate" class="quick-btn">Error Aggregate: Off</button>
+          <button id="quick-reset-filters" class="quick-btn">Reset Filters</button>
+        </div>
+
+        <div id="activity-list" class="activity-list">
+          <div class="empty">Loading...</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+    <script src="/public/monitor.js"></script>
+
+  <div id="drawer-overlay" class="drawer-overlay"></div>
+  <aside id="detail-drawer" class="detail-drawer">
+    <div class="detail-header">
+      <span>Event Details</span>
+      <button id="detail-close" class="detail-close">Close</button>
+    </div>
+    <div id="detail-body" class="detail-body">Click any event to view details</div>
+  </aside>
+</body>
+</html>
