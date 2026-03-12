@@ -1732,6 +1732,24 @@ const HTML_PAGE = `<!DOCTYPE html>
     .thinking .description { color: #8b949e; font-style: italic; }
     .reply .description { color: #c9d1d9; }
 
+    .description.collapsed {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-height: 4.5em;
+    }
+    .desc-toggle {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #58a6ff;
+      cursor: pointer;
+      user-select: none;
+      display: inline-block;
+    }
+    .desc-toggle:hover { text-decoration: underline; }
+
     /* 新增：详细信息行 */
     .details-row {
       display: flex;
@@ -1745,22 +1763,69 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     .empty { text-align: center; padding: 40px; color: #8b949e; }
 
-    .controls {
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .summary-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .summary-card .label {
+      color: #8b949e;
+      font-size: 11px;
+    }
+    .summary-card .value {
+      margin-top: 4px;
+      color: #f0f6fc;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .filters {
       margin-bottom: 16px;
       display: flex;
-      gap: 10px;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
     }
-    .btn {
-      padding: 6px 12px;
+    .filter-select,
+    .filter-input {
+      background: #161b22;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      min-height: 32px;
+    }
+    .filter-input { min-width: 240px; }
+    .filter-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #8b949e;
+      padding: 6px 8px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+    }
+    .quick-btn {
       background: #21262d;
       border: 1px solid #30363d;
       color: #c9d1d9;
       border-radius: 6px;
-      cursor: pointer;
+      padding: 6px 10px;
       font-size: 12px;
+      cursor: pointer;
     }
-    .btn:hover { background: #30363d; }
-    .btn.active { background: #238636; border-color: #238636; }
+    .quick-btn:hover { background: #30363d; }
   </style>
 </head>
 <body>
@@ -1795,6 +1860,45 @@ const HTML_PAGE = `<!DOCTYPE html>
       </div>
     </div>
 
+    <div class="summary-cards">
+      <div class="summary-card">
+        <div class="label">活跃会话</div>
+        <div class="value" id="metric-active-sessions">--</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">5分钟错误数</div>
+        <div class="value" id="metric-errors-5m">--</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">慢调用（>3s）</div>
+        <div class="value" id="metric-slow-calls">--</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">当前列表</div>
+        <div class="value" id="metric-visible">--</div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <select id="filter-agent" class="filter-select">
+        <option value="all">全部 Agent</option>
+      </select>
+      <select id="filter-type" class="filter-select">
+        <option value="all">全部类型</option>
+        <option value="tool">tool</option>
+        <option value="reply">reply</option>
+        <option value="thinking">thinking</option>
+        <option value="cron">cron</option>
+      </select>
+      <input id="filter-keyword" class="filter-input" placeholder="搜索关键词（description / tool / session）" />
+      <label class="filter-check">
+        <input type="checkbox" id="filter-errors-only" />
+        仅看异常
+      </label>
+      <button id="quick-error-mode" class="quick-btn">异常模式</button>
+      <button id="quick-reset-filters" class="quick-btn">重置筛选</button>
+    </div>
+
     <div id="activity-list" class="activity-list">
       <div class="empty">加载中...</div>
     </div>
@@ -1804,6 +1908,20 @@ const HTML_PAGE = `<!DOCTYPE html>
     const listEl = document.getElementById('activity-list');
     const agentsEl = document.getElementById('agents-list');
 
+    const filterAgentEl = document.getElementById('filter-agent');
+    const filterTypeEl = document.getElementById('filter-type');
+    const filterKeywordEl = document.getElementById('filter-keyword');
+    const filterErrorsOnlyEl = document.getElementById('filter-errors-only');
+    const quickErrorModeEl = document.getElementById('quick-error-mode');
+    const quickResetFiltersEl = document.getElementById('quick-reset-filters');
+
+    const metricActiveSessionsEl = document.getElementById('metric-active-sessions');
+    const metricErrors5mEl = document.getElementById('metric-errors-5m');
+    const metricSlowCallsEl = document.getElementById('metric-slow-calls');
+    const metricVisibleEl = document.getElementById('metric-visible');
+
+    let latestActivities = [];
+    const expandedItems = new Set();
     let pollCount = 0;
 
     function formatTime(isoString) {
@@ -1825,6 +1943,10 @@ const HTML_PAGE = `<!DOCTYPE html>
       }
       if (!total || isNaN(total)) return null;
       return Number(total).toLocaleString();
+    }
+
+    function getActivityKey(activity) {
+      return [activity.timestamp, activity.agent, activity.sessionName, activity.type, activity.tool || '', activity.description || ''].join('|');
     }
 
     function createActivityItem(activity) {
@@ -1862,12 +1984,37 @@ const HTML_PAGE = `<!DOCTYPE html>
         meta.appendChild(cronTag);
       }
 
-      const desc = document.createElement('span');
+      const desc = document.createElement('div');
       desc.className = 'description';
-      desc.textContent = activity.description;
+      const fullDesc = activity.description || '';
+      desc.textContent = fullDesc;
 
       div.appendChild(meta);
       div.appendChild(desc);
+
+      if (fullDesc.length > 180 || fullDesc.split('\\n').length > 3) {
+        const activityKey = getActivityKey(activity);
+        const isExpanded = expandedItems.has(activityKey);
+
+        if (!isExpanded) {
+          desc.classList.add('collapsed');
+        }
+
+        const toggle = document.createElement('span');
+        toggle.className = 'desc-toggle';
+        toggle.textContent = isExpanded ? '收起' : '展开';
+        toggle.addEventListener('click', () => {
+          const collapsed = desc.classList.toggle('collapsed');
+          const expanded = !collapsed;
+          if (expanded) {
+            expandedItems.add(activityKey);
+          } else {
+            expandedItems.delete(activityKey);
+          }
+          toggle.textContent = collapsed ? '展开' : '收起';
+        });
+        div.appendChild(toggle);
+      }
 
       // 新增：详细信息行（模型、token、执行时间、退出码）
       const detailsRow = document.createElement('div');
@@ -1921,22 +2068,81 @@ const HTML_PAGE = `<!DOCTYPE html>
         tag.textContent = agent;
         agentsEl.appendChild(tag);
       });
+
+      const current = filterAgentEl.value || 'all';
+      filterAgentEl.innerHTML = '<option value="all">全部 Agent</option>';
+      agents.forEach(agent => {
+        const op = document.createElement('option');
+        op.value = agent;
+        op.textContent = agent;
+        filterAgentEl.appendChild(op);
+      });
+      filterAgentEl.value = agents.includes(current) ? current : 'all';
+    }
+
+    function isErrorActivity(activity) {
+      if (!activity) return false;
+      if (activity.type === 'tool' && (activity.toolError || activity.exitCode > 0)) return true;
+      if (activity.type === 'cron' && activity.status === 'error') return true;
+      return false;
+    }
+
+    function applyFilters(activities) {
+      const agent = filterAgentEl.value;
+      const type = filterTypeEl.value;
+      const kw = (filterKeywordEl.value || '').trim().toLowerCase();
+      const onlyErrors = filterErrorsOnlyEl.checked;
+
+      return activities.filter(a => {
+        if (agent !== 'all' && a.agent !== agent) return false;
+        if (type !== 'all' && a.type !== type) return false;
+        if (onlyErrors && !isErrorActivity(a)) return false;
+
+        if (kw) {
+          const target = [a.description, a.tool, a.sessionName, a.agent, a.type].filter(Boolean).join(' ').toLowerCase();
+          if (!target.includes(kw)) return false;
+        }
+        return true;
+      });
+    }
+
+    function updateMetrics(allActivities, visibleActivities) {
+      const now = Date.now();
+      const fiveMinAgo = now - 5 * 60 * 1000;
+
+      const activeSessions = new Set((allActivities || []).map(a => a.sessionName).filter(Boolean));
+      const errors5m = (allActivities || []).filter(a => {
+        const t = new Date(a.timestamp).getTime();
+        return t >= fiveMinAgo && isErrorActivity(a);
+      }).length;
+      const slowCalls = (allActivities || []).filter(a => (a.durationMs || 0) > 3000).length;
+
+      metricActiveSessionsEl.textContent = activeSessions.size;
+      metricErrors5mEl.textContent = errors5m;
+      metricSlowCallsEl.textContent = slowCalls;
+      metricVisibleEl.textContent = visibleActivities.length;
+    }
+
+    function renderFilteredList() {
+      const visible = applyFilters(latestActivities);
+      listEl.innerHTML = '';
+
+      console.log('[Agent-Monitor] 更新列表:', visible.length, '/', latestActivities.length, 'activities');
+
+      if (visible.length === 0) {
+        listEl.innerHTML = '<div class="empty">当前筛选条件下暂无活动</div>';
+      } else {
+        visible.forEach(activity => {
+          listEl.appendChild(createActivityItem(activity));
+        });
+      }
+
+      updateMetrics(latestActivities, visible);
     }
 
     function updateList(activities) {
-      // 直接重新渲染整个列表，确保实时更新
-      listEl.innerHTML = '';
-
-      console.log('[Agent-Monitor] 更新列表:', activities.length, 'activities');
-
-      if (activities.length === 0) {
-        listEl.innerHTML = '<div class="empty">暂无活动</div>';
-        return;
-      }
-
-      activities.forEach(activity => {
-        listEl.appendChild(createActivityItem(activity));
-      });
+      latestActivities = activities || [];
+      renderFilteredList();
     }
 
     // 轮询配置
@@ -2037,6 +2243,27 @@ const HTML_PAGE = `<!DOCTYPE html>
         document.getElementById('disk-value').textContent = system.disk.percentage + '%';
       }
     }
+
+
+    // 过滤器事件
+    [filterAgentEl, filterTypeEl, filterKeywordEl, filterErrorsOnlyEl].forEach(el => {
+      el.addEventListener('input', renderFilteredList);
+      el.addEventListener('change', renderFilteredList);
+    });
+
+    quickErrorModeEl.addEventListener('click', () => {
+      filterErrorsOnlyEl.checked = true;
+      filterTypeEl.value = 'all';
+      renderFilteredList();
+    });
+
+    quickResetFiltersEl.addEventListener('click', () => {
+      filterAgentEl.value = 'all';
+      filterTypeEl.value = 'all';
+      filterKeywordEl.value = '';
+      filterErrorsOnlyEl.checked = false;
+      renderFilteredList();
+    });
 
     // 立即执行第一次
     poll();
