@@ -643,13 +643,21 @@ function init() {
 }
 
 // 获取状态
-function getStatus() {
+function getStatus(since = null) {
   // 合并 session 和 cron 记录
   const allActivities = [...recentActivities, ...cronActivities];
-  const sorted = allActivities
+  let sorted = allActivities
     .slice()
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, CONFIG.maxActivities);
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if (since) {
+    const sinceMs = new Date(since).getTime();
+    if (!isNaN(sinceMs)) {
+      sorted = sorted.filter(a => new Date(a.timestamp).getTime() > sinceMs);
+    }
+  }
+
+  sorted = sorted.slice(0, CONFIG.maxActivities);
 
   return {
     agents: Array.from(activeSessions.keys()),
@@ -670,7 +678,7 @@ app.get('/', (req, res) => {
 app.get('/api', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Content-Type', 'application/json');
-  res.json(getStatus());
+  res.json(getStatus(req.query.since || null));
 });
 
 // 健康检查
@@ -1784,6 +1792,17 @@ const HTML_PAGE = `<!DOCTYPE html>
       flex-direction: column;
     }
     .detail-drawer.open { right: 0; }
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 999;
+      display: none;
+    }
+    .drawer-overlay.open { display: block; }
+    @media (max-width: 768px) {
+      .detail-drawer { width: 100%; right: -100%; }
+    }
     .detail-header {
       display: flex;
       align-items: center;
@@ -2000,6 +2019,10 @@ const HTML_PAGE = `<!DOCTYPE html>
     const expandedItems = new Set();
     let errorAggregateMode = false;
     let pollCount = 0;
+    let lastRenderedSignature = '';
+    let lastServerTimestamp = null;
+
+    const STORAGE_KEY = 'agent-monitor.ui-state.v1';
 
     function formatTime(isoString) {
       const date = new Date(isoString);
@@ -2026,6 +2049,32 @@ const HTML_PAGE = `<!DOCTYPE html>
       return [activity.timestamp, activity.agent, activity.sessionName, activity.type, activity.tool || '', activity.description || ''].join('|');
     }
 
+    function saveUIState() {
+      const state = {
+        filterAgent: filterAgentEl.value,
+        filterType: filterTypeEl.value,
+        filterKeyword: filterKeywordEl.value,
+        filterErrorsOnly: filterErrorsOnlyEl.checked,
+        errorAggregateMode
+      };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
+    }
+
+    function loadUIState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const state = JSON.parse(raw);
+        if (state.filterType) filterTypeEl.value = state.filterType;
+        if (typeof state.filterKeyword === 'string') filterKeywordEl.value = state.filterKeyword;
+        if (typeof state.filterErrorsOnly === 'boolean') filterErrorsOnlyEl.checked = state.filterErrorsOnly;
+        if (typeof state.errorAggregateMode === 'boolean') {
+          errorAggregateMode = state.errorAggregateMode;
+          toggleErrorAggregateEl.textContent = '错误聚合: ' + (errorAggregateMode ? '开' : '关');
+        }
+      } catch (_) {}
+    }
+
     function openDetail(activity) {
       const detail = {
         timestamp: activity.timestamp,
@@ -2046,6 +2095,7 @@ const HTML_PAGE = `<!DOCTYPE html>
       if (!detailBodyEl || !detailDrawerEl) return;
       detailBodyEl.innerHTML = '<pre>' + JSON.stringify(detail, null, 2) + '</pre>';
       detailDrawerEl.classList.add('open');
+      document.getElementById('drawer-overlay')?.classList.add('open');
     }
 
     function createActivityItem(activity) {
@@ -2103,7 +2153,8 @@ const HTML_PAGE = `<!DOCTYPE html>
         const toggle = document.createElement('span');
         toggle.className = 'desc-toggle';
         toggle.textContent = isExpanded ? '收起' : '展开';
-        toggle.addEventListener('click', () => {
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation();
           const collapsed = desc.classList.toggle('collapsed');
           const expanded = !collapsed;
           if (expanded) {
@@ -2177,7 +2228,8 @@ const HTML_PAGE = `<!DOCTYPE html>
         agentsEl.appendChild(tag);
       });
 
-      const current = filterAgentEl.value || 'all';
+      const savedAgent = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').filterAgent; } catch (_) { return null; } })();
+      const current = filterAgentEl.value || savedAgent || 'all';
       filterAgentEl.innerHTML = '<option value="all">全部 Agent</option>';
       agents.forEach(agent => {
         const op = document.createElement('option');
@@ -2278,6 +2330,12 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     function updateList(activities) {
       latestActivities = activities || [];
+      const signature = latestActivities.slice(0, 120).map(getActivityKey).join('||');
+      if (signature === lastRenderedSignature) {
+        updateMetrics(latestActivities, aggregateErrorActivities(applyFilters(latestActivities)));
+        return;
+      }
+      lastRenderedSignature = signature;
       renderFilteredList();
     }
 
@@ -2298,7 +2356,8 @@ const HTML_PAGE = `<!DOCTYPE html>
         pollCount++;
         console.log('[Agent-Monitor] 轮询 #' + pollCount + ' (间隔: ' + currentInterval + 'ms)');
 
-        const res = await fetch('/api?t=' + Date.now(), {
+        const sinceQuery = lastServerTimestamp ? ('&since=' + encodeURIComponent(lastServerTimestamp)) : '';
+        const res = await fetch('/api?t=' + Date.now() + sinceQuery, {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         });
@@ -2309,19 +2368,38 @@ const HTML_PAGE = `<!DOCTYPE html>
         const activityCount = data.activities ? data.activities.length : 0;
         console.log('[Agent-Monitor] 收到数据:', activityCount, 'activities');
 
-        // 检测活动数量变化
-        if (activityCount !== lastActivityCount) {
-          console.log('[Agent-Monitor] 检测到数据变化:', lastActivityCount, '->', activityCount);
-          lastActivityCount = activityCount;
-          
-          // 切换到快速模式
-          if (currentInterval !== POLL_CONFIG.fastInterval) {
-            switchToFastMode();
-          }
+        const hadCursor = !!lastServerTimestamp;
+        if (data.updatedAt) lastServerTimestamp = data.updatedAt;
+
+        const incoming = data.activities || [];
+
+        // 仅在有新数据时进入快速模式
+        if (incoming.length > 0 && currentInterval !== POLL_CONFIG.fastInterval) {
+          switchToFastMode();
         }
 
         updateAgents(data.agents || []);
-        updateList(data.activities || []);
+
+        if (!hadCursor) {
+          // 首次全量加载
+          updateList(incoming);
+        } else if (incoming.length > 0) {
+          // 增量合并；无增量时保持当前列表不动
+          const merged = [...incoming, ...latestActivities]
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          const dedup = [];
+          const seen = new Set();
+          for (const a of merged) {
+            const k = getActivityKey(a);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            dedup.push(a);
+            if (dedup.length >= 300) break;
+          }
+          updateList(dedup);
+        }
+
+        lastActivityCount = latestActivities.length;
         updateSystemPanel(data.system);
       } catch (err) {
         console.error('[Agent-Monitor] 请求失败:', err.message);
@@ -2383,20 +2461,22 @@ const HTML_PAGE = `<!DOCTYPE html>
 
     // 过滤器事件
     [filterAgentEl, filterTypeEl, filterKeywordEl, filterErrorsOnlyEl].forEach(el => {
-      el.addEventListener('input', renderFilteredList);
-      el.addEventListener('change', renderFilteredList);
+      el.addEventListener('input', () => { renderFilteredList(); saveUIState(); });
+      el.addEventListener('change', () => { renderFilteredList(); saveUIState(); });
     });
 
     quickErrorModeEl.addEventListener('click', () => {
       filterErrorsOnlyEl.checked = true;
       filterTypeEl.value = 'all';
       renderFilteredList();
+      saveUIState();
     });
 
     toggleErrorAggregateEl.addEventListener('click', () => {
       errorAggregateMode = !errorAggregateMode;
       toggleErrorAggregateEl.textContent = '错误聚合: ' + (errorAggregateMode ? '开' : '关');
       renderFilteredList();
+      saveUIState();
     });
 
     quickResetFiltersEl.addEventListener('click', () => {
@@ -2407,14 +2487,35 @@ const HTML_PAGE = `<!DOCTYPE html>
       errorAggregateMode = false;
       toggleErrorAggregateEl.textContent = '错误聚合: 关';
       renderFilteredList();
+      saveUIState();
     });
 
     document.addEventListener('click', (e) => {
       if (e.target && e.target.id === 'detail-close') {
         const detailDrawerEl = getDetailDrawerEl();
         detailDrawerEl?.classList.remove('open');
+        document.getElementById('drawer-overlay')?.classList.remove('open');
       }
     });
+
+
+    document.getElementById('drawer-overlay')?.addEventListener('click', () => {
+      const detailDrawerEl = getDetailDrawerEl();
+      detailDrawerEl?.classList.remove('open');
+      document.getElementById('drawer-overlay')?.classList.remove('open');
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const detailDrawerEl = getDetailDrawerEl();
+        if (detailDrawerEl?.classList.contains('open')) {
+          detailDrawerEl.classList.remove('open');
+          document.getElementById('drawer-overlay')?.classList.remove('open');
+        }
+      }
+    });
+
+    loadUIState();
 
     // 立即执行第一次
     poll();
@@ -2424,6 +2525,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     console.log('[Agent-Monitor] 轮询已启动, 默认间隔: 5秒, intervalId:', intervalId);
   </script>
 
+  <div id="drawer-overlay" class="drawer-overlay"></div>
   <aside id="detail-drawer" class="detail-drawer">
     <div class="detail-header">
       <span>事件详情</span>
