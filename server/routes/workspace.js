@@ -57,19 +57,20 @@ function countTree(items) {
   return { fileCount, dirCount };
 }
 
-function renderImageContent(fullPath, fileName) {
+function getImageMimeType(fileName) {
   const ext = path.extname(fileName).toLowerCase();
-  const mimeType = ext === '.svg' ? 'image/svg+xml'
+  return ext === '.svg' ? 'image/svg+xml'
     : ext === '.png' ? 'image/png'
     : ext === '.gif' ? 'image/gif'
     : ext === '.webp' ? 'image/webp'
     : ext === '.bmp' ? 'image/bmp'
     : ext === '.ico' ? 'image/x-icon'
     : 'image/jpeg';
+}
 
-  const buffer = fs.readFileSync(fullPath);
-  const base64 = buffer.toString('base64');
-  return `<div class="file-view-content image-preview-wrap"><img class="file-image-preview" src="data:${mimeType};base64,${base64}" alt="${escapeHtml(fileName)}" /></div>`;
+function renderImageContent(agentKey, filePath, fileName) {
+  const rawUrl = `/workspace/raw/${encodeURIComponent(filePath)}?agent=${encodeURIComponent(agentKey)}`;
+  return `<div class="file-view-content image-preview-wrap"><img class="file-image-preview" src="${rawUrl}" alt="${escapeHtml(fileName)}" loading="lazy" /></div>`;
 }
 
 function renderBinaryContent(fileName, size) {
@@ -95,6 +96,25 @@ function createWorkspaceRouter({ baseDir }) {
         <span>${escapeHtml(cfg.name)}</span>
       </a>`;
     }).join('');
+  }
+
+  function resolveWorkspaceFile(req, res) {
+    const agents = getWorkspaceAgents();
+    const agentKey = getValidWorkspaceAgent(req.query.agent || 'main');
+    const config = agents[agentKey];
+    if (!config) {
+      res.status(404).send('Workspace not found');
+      return null;
+    }
+
+    const filePath = decodeURIComponent(req.params[0]);
+    const fullPath = path.join(config.workspace, filePath);
+    if (!isPathSafe(fullPath, config.workspace) || !fs.existsSync(fullPath)) {
+      res.status(404).send('File not found');
+      return null;
+    }
+
+    return { agents, agentKey, config, filePath, fullPath };
   }
 
   router.get('/workspace', (req, res) => {
@@ -124,19 +144,28 @@ function createWorkspaceRouter({ baseDir }) {
     res.send(html);
   });
 
-  router.get('/workspace/view/*', (req, res) => {
-    const agents = getWorkspaceAgents();
-    const agentKey = getValidWorkspaceAgent(req.query.agent || 'main');
-    const config = agents[agentKey];
-    if (!config) return res.status(404).send('Workspace not found');
+  router.get('/workspace/raw/*', (req, res) => {
+    const resolved = resolveWorkspaceFile(req, res);
+    if (!resolved) return;
 
-    const filePath = decodeURIComponent(req.params[0]);
-    const fullPath = path.join(config.workspace, filePath);
+    const { fullPath, filePath } = resolved;
+    const fileName = path.basename(filePath);
+    const ext = path.extname(fileName).toLowerCase();
 
-    if (!isPathSafe(fullPath, config.workspace) || !fs.existsSync(fullPath)) {
-      return res.status(404).send('File not found');
+    if (!IMAGE_EXTENSIONS.has(ext)) {
+      return res.status(400).send('Raw route currently supports image preview files only');
     }
 
+    res.setHeader('Cache-Control', 'no-store');
+    res.type(getImageMimeType(fileName));
+    fs.createReadStream(fullPath).pipe(res);
+  });
+
+  router.get('/workspace/view/*', (req, res) => {
+    const resolved = resolveWorkspaceFile(req, res);
+    if (!resolved) return;
+
+    const { agents, agentKey, config, filePath, fullPath } = resolved;
     const stat = fs.statSync(fullPath);
     const fileName = path.basename(filePath);
     const ext = path.extname(fileName).toLowerCase();
@@ -144,7 +173,7 @@ function createWorkspaceRouter({ baseDir }) {
     let contentHtml;
     try {
       if (IMAGE_EXTENSIONS.has(ext)) {
-        contentHtml = renderImageContent(fullPath, fileName);
+        contentHtml = renderImageContent(agentKey, filePath, fileName);
       } else if (TEXT_EXTENSIONS.has(ext)) {
         const content = fs.readFileSync(fullPath, 'utf-8');
         if (ext === '.md') {
