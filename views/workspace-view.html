@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="/public/workspace.css">
+</head>
+<body class="file-view-page">
+  <div class="container">
+    <aside class="sidebar compact">
+      <div class="sidebar-header">
+        <div class="sidebar-title">📂 {{FILE_NAME}}</div>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="header-nav">
+        <a href="/">← 返回 Monitor</a>
+        <a href="/workspace?agent={{AGENT}}">← 返回 Workspace</a>
+      </div>
+      <div class="breadcrumb">
+        <a href="/workspace?agent={{AGENT}}">📂 Home</a>
+        <span class="breadcrumb-sep">/</span>
+        {{BREADCRUMBS}}
+      </div>
+      <div class="file-view">
+        <div class="file-view-header">
+          <span>{{FILE_ICON}}</span>
+          <span class="file-view-name">{{FILE_NAME}}</span>
+          <span class="file-view-size">{{FILE_SIZE}}</span>
+        </div>
+        {{CONTENT_HTML}}
+      </div>
+    </main>
+  </div>
+</body>
+</html>

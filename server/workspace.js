@@ -169,5 +169,7 @@ module.exports = {
   getValidWorkspaceAgent,
   isPathSafe,
   getFileList,
+  formatFileSize,
+  getFileIcon,
   generateWorkspaceTree
 };

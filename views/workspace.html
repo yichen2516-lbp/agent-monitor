@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="/public/workspace.css">
+</head>
+<body>
+  <div class="container workspace-page">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">📁 文件列表</div>
+        <div class="agent-tabs">{{AGENT_TABS}}</div>
+      </div>
+      <div class="file-tree-container">{{FILE_TREE}}</div>
+    </aside>
+    <main class="main">
+      <div class="header-nav">
+        <a href="/">← 返回 Monitor</a>
+        <span class="header-sep">|</span>
+        <span class="header-subtitle">{{AGENT_NAME}}'s Workspace</span>
+      </div>
+      <div class="welcome">
+        <div class="welcome-emoji">{{AGENT_EMOJI}}</div>
+        <h2>{{AGENT_NAME}}'s Workspace</h2>
+        <p>从左侧选择文件开始浏览</p>
+        <div class="path">{{WORKSPACE_PATH}}</div>
+        <div class="stats">
+          <div class="stat-box" style="--color:{{AGENT_COLOR}}">
+            <div class="stat-value">{{FILE_COUNT}}</div>
+            <div class="stat-label">文件</div>
+          </div>
+          <div class="stat-box" style="--color:#58a6ff">
+            <div class="stat-value">{{DIR_COUNT}}</div>
+            <div class="stat-label">文件夹</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <button class="mobile-toggle" onclick="toggleSidebar()" title="切换侧边栏">📂</button>
+  <script src="/public/workspace.js"></script>
+</body>
+</html>
