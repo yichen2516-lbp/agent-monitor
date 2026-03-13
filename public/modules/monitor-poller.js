@@ -1,6 +1,15 @@
 window.AgentMonitor = window.AgentMonitor || {};
 
 window.AgentMonitor.poller = {
+  getLatestActivityTimestamp(activities) {
+    if (!Array.isArray(activities) || activities.length === 0) return null;
+    return activities.reduce((latest, activity) => {
+      const ts = activity?.timestamp;
+      if (!ts) return latest;
+      if (!latest) return ts;
+      return new Date(ts).getTime() > new Date(latest).getTime() ? ts : latest;
+    }, null);
+  },
   switchToFastMode() {
     const state = window.AgentMonitor.state;
 
@@ -60,18 +69,25 @@ window.AgentMonitor.poller = {
 
       const data = await res.json();
       const hadCursor = !!state.lastServerTimestamp;
-      if (data.updatedAt) state.lastServerTimestamp = data.updatedAt;
       state.connectionMode = 'polling';
 
       render.updateAgents(data.agents || [], refs);
+      state.sessionStatuses = data.sessionStatuses || [];
       render.updateAgentStatuses(data.agentStatuses || {}, refs);
       render.updateConnectionStatus(refs);
 
       const incoming = data.activities || [];
+      const latestActivityTimestamp = this.getLatestActivityTimestamp(incoming);
       if (!hadCursor) {
         render.updateList(incoming, refs);
       } else if (incoming.length > 0) {
         this.mergeIncomingActivities(incoming, refs);
+      }
+
+      if (latestActivityTimestamp) {
+        state.lastServerTimestamp = latestActivityTimestamp;
+      } else if (!state.lastServerTimestamp && data.updatedAt) {
+        state.lastServerTimestamp = data.updatedAt;
       }
 
       systemPanel.update(data.system);
@@ -121,14 +137,13 @@ window.AgentMonitor.poller = {
           if (message?.event === 'activities') {
             const activities = message.payload?.activities || [];
             const statuses = message.payload?.agentStatuses || {};
+            state.sessionStatuses = message.payload?.sessionStatuses || [];
             this.mergeIncomingActivities(activities, refs);
             render.updateAgentStatuses(statuses, refs);
             state.connectionMode = 'ws-live';
             render.updateConnectionStatus(refs);
-            if (activities.length > 0) {
-              const latestTimestamp = activities[0]?.timestamp;
-              if (latestTimestamp) state.lastServerTimestamp = latestTimestamp;
-            }
+            const latestTimestamp = this.getLatestActivityTimestamp(activities);
+            if (latestTimestamp) state.lastServerTimestamp = latestTimestamp;
             return;
           }
 

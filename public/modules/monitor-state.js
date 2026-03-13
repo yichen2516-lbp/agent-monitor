@@ -16,6 +16,8 @@ window.AgentMonitor.state = {
   wsRetryCount: 0,
   latestAgents: [],
   agentStatuses: {},
+  sessionStatuses: [],
+  selectedSessionKey: null,
   connectionMode: 'connecting',
   quickMode: 'all',
   STORAGE_KEY: 'agent-monitor.ui-state.v2',

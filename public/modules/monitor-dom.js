@@ -24,6 +24,9 @@ window.AgentMonitor.dom = {
       metricVisibleEl: document.getElementById('metric-visible'),
       metricCardErrors5mEl: document.getElementById('metric-card-errors-5m'),
       metricCardSlowCallsEl: document.getElementById('metric-card-slow-calls'),
+      sessionFocusBarEl: document.getElementById('session-focus-bar'),
+      sessionFocusLabelEl: document.getElementById('session-focus-label'),
+      sessionFocusClearEl: document.getElementById('session-focus-clear'),
       drawerOverlayEl: document.getElementById('drawer-overlay')
     };
   },

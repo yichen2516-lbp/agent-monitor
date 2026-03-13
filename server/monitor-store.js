@@ -7,18 +7,233 @@ const { parseCronLine } = require('./parsers/cron-parser');
 const { createActivityStore } = require('./store/activity-store');
 const { createSessionWatcher } = require('./watchers/session-watcher');
 
+const STATUS_IDLE_AFTER_MS = 15 * 1000;
+const AGENT_HIDE_AFTER_MS = 20 * 60 * 1000;
+const WAITING_MODEL_AFTER_MS = 2500;
+const TOOL_RUNNING_AFTER_MS = 1500;
+
+function getSessionKey(activity) {
+  return `${activity.agent}:${activity.sessionName || 'unknown'}`;
+}
+
+function safeTimestampMs(value) {
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function inferEventState(activity) {
+  if (!activity) return null;
+
+  if (activity.type === 'thinking') {
+    return {
+      code: 'thinking',
+      label: 'Thinking',
+      isTerminal: false,
+      tool: null,
+      error: null,
+      model: activity.model || null,
+      provider: activity.provider || null,
+      updatedAt: activity.timestamp
+    };
+  }
+
+  if (activity.type === 'tool') {
+    if (activity.toolError || Number(activity.exitCode) > 0) {
+      return {
+        code: 'tool-failed',
+        label: `Tool failed · ${activity.tool || 'unknown'}`,
+        isTerminal: true,
+        tool: activity.tool || null,
+        error: activity.error || activity.description || null,
+        model: activity.model || null,
+        provider: activity.provider || null,
+        updatedAt: activity.timestamp
+      };
+    }
+
+    if (activity.exitCode !== undefined || activity.durationMs || activity.toolStatus) {
+      return {
+        code: 'tool-done',
+        label: `Tool done · ${activity.tool || 'unknown'}`,
+        isTerminal: true,
+        tool: activity.tool || null,
+        error: null,
+        model: activity.model || null,
+        provider: activity.provider || null,
+        updatedAt: activity.timestamp
+      };
+    }
+
+    return {
+      code: 'tool-call-pending',
+      label: `Tool pending · ${activity.tool || 'unknown'}`,
+      isTerminal: false,
+      tool: activity.tool || null,
+      error: null,
+      model: activity.model || null,
+      provider: activity.provider || null,
+      updatedAt: activity.timestamp
+    };
+  }
+
+  if (activity.type === 'reply') {
+    return {
+      code: 'reply-done',
+      label: 'Reply ready',
+      isTerminal: true,
+      tool: null,
+      error: null,
+      model: activity.model || null,
+      provider: activity.provider || null,
+      updatedAt: activity.timestamp
+    };
+  }
+
+  if (activity.type === 'cron') {
+    return {
+      code: activity.status === 'error' ? 'cron-error' : 'cron',
+      label: activity.status === 'error' ? 'Cron error' : 'Cron run',
+      isTerminal: true,
+      tool: null,
+      error: activity.error || null,
+      model: activity.model || null,
+      provider: activity.provider || null,
+      updatedAt: activity.timestamp
+    };
+  }
+
+  return null;
+}
+
+function normalizeSessionStatus(status, now = Date.now()) {
+  if (!status) return null;
+
+  const updatedAtMs = safeTimestampMs(status.updatedAt);
+  const stateStartedAtMs = safeTimestampMs(status.stateStartedAt || status.updatedAt);
+  if (!updatedAtMs || !stateStartedAtMs) return null;
+
+  let normalized = {
+    ...status,
+    durationMs: Math.max(0, now - stateStartedAtMs),
+    updatedAgoMs: Math.max(0, now - updatedAtMs)
+  };
+
+  if (normalized.code === 'thinking' && normalized.updatedAgoMs >= WAITING_MODEL_AFTER_MS) {
+    normalized = {
+      ...normalized,
+      code: 'waiting-model',
+      label: 'Waiting for model'
+    };
+  } else if (normalized.code === 'tool-call-pending' && normalized.updatedAgoMs >= TOOL_RUNNING_AFTER_MS) {
+    normalized = {
+      ...normalized,
+      code: 'tool-running',
+      label: `Tool running · ${normalized.tool || 'unknown'}`
+    };
+  } else if (normalized.isTerminal && normalized.updatedAgoMs >= STATUS_IDLE_AFTER_MS) {
+    normalized = {
+      ...normalized,
+      code: 'idle',
+      label: 'Idle',
+      tool: null,
+      error: null,
+      durationMs: Math.max(0, now - updatedAtMs)
+    };
+  }
+
+  return normalized;
+}
+
+function createSessionStatusTracker() {
+  const sessionStatuses = new Map();
+
+  function applyActivity(activity) {
+    const next = inferEventState(activity);
+    if (!next) return;
+
+    const sessionKey = getSessionKey(activity);
+    const prev = sessionStatuses.get(sessionKey);
+    const sameState = prev && prev.code === next.code && prev.tool === next.tool;
+    const stateStartedAt = sameState ? (prev.stateStartedAt || prev.updatedAt) : next.updatedAt;
+
+    sessionStatuses.set(sessionKey, {
+      agent: activity.agent,
+      sessionName: activity.sessionName || 'unknown',
+      sessionKey,
+      code: next.code,
+      label: next.label,
+      tool: next.tool,
+      error: next.error,
+      model: next.model,
+      provider: next.provider,
+      source: activity.source || prev?.source || null,
+      lastType: activity.type,
+      lastDescription: activity.description || prev?.lastDescription || '',
+      isTerminal: next.isTerminal,
+      updatedAt: next.updatedAt,
+      stateStartedAt
+    });
+  }
+
+  function applyActivities(activities) {
+    if (!Array.isArray(activities)) return;
+    activities.forEach(applyActivity);
+  }
+
+  function getSessionStatuses(now = Date.now()) {
+    const visible = [];
+    for (const status of sessionStatuses.values()) {
+      const normalized = normalizeSessionStatus(status, now);
+      if (!normalized) continue;
+      if (normalized.updatedAgoMs > AGENT_HIDE_AFTER_MS) continue;
+      visible.push(normalized);
+    }
+
+    visible.sort((a, b) => {
+      const diff = (safeTimestampMs(b.updatedAt) || 0) - (safeTimestampMs(a.updatedAt) || 0);
+      if (diff !== 0) return diff;
+      return String(a.sessionKey).localeCompare(String(b.sessionKey));
+    });
+
+    return visible;
+  }
+
+  function getAgentStatuses(now = Date.now()) {
+    const byAgent = new Map();
+
+    for (const status of getSessionStatuses(now)) {
+      const existing = byAgent.get(status.agent);
+      const existingUpdatedAt = existing ? (safeTimestampMs(existing.updatedAt) || 0) : 0;
+      const nextUpdatedAt = safeTimestampMs(status.updatedAt) || 0;
+      const nextPriority = status.code === 'idle' ? 0 : 1;
+      const existingPriority = existing ? (existing.code === 'idle' ? 0 : 1) : -1;
+
+      if (!existing || nextPriority > existingPriority || nextUpdatedAt >= existingUpdatedAt) {
+        byAgent.set(status.agent, status);
+      }
+    }
+
+    return Object.fromEntries(byAgent.entries());
+  }
+
+  return {
+    applyActivity,
+    applyActivities,
+    getSessionStatuses,
+    getAgentStatuses
+  };
+}
+
 function createMonitorStore({ CONFIG, getSystemStats }) {
   const activeSessions = new Map();
   const subscribers = new Set();
-  const sessionLiveStatuses = new Map();
-  const STATUS_IDLE_AFTER_MS = 15 * 1000;
-  const AGENT_HIDE_AFTER_MS = 20 * 60 * 1000;
   const toolCallState = createToolCallState();
   const activityParser = createActivityParser({ toolCallState });
   const activityStore = createActivityStore({
     maxActivities: CONFIG.maxActivities,
     activityMaxAgeHours: CONFIG.activityMaxAgeHours
   });
+  const sessionStatusTracker = createSessionStatusTracker();
 
   function getAllSessions() {
     const sessions = [];
@@ -128,82 +343,14 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
     });
   }
 
-  function deriveSessionStatus(activity) {
-    if (!activity) return null;
-
-    if (activity.type === 'thinking') {
-      return { code: 'thinking', label: 'Thinking', tool: null, error: null, updatedAt: activity.timestamp };
-    }
-
-    if (activity.type === 'tool') {
-      if (activity.toolError || Number(activity.exitCode) > 0) {
-        return { code: 'tool-failed', label: `Tool failed · ${activity.tool || 'unknown'}`, tool: activity.tool || null, error: activity.error || activity.description || null, updatedAt: activity.timestamp };
-      }
-      if (activity.exitCode !== undefined || activity.durationMs || activity.toolStatus) {
-        return { code: 'tool-done', label: `Tool done · ${activity.tool || 'unknown'}`, tool: activity.tool || null, error: null, updatedAt: activity.timestamp };
-      }
-      return { code: 'tool-running', label: `Tool running · ${activity.tool || 'unknown'}`, tool: activity.tool || null, error: null, updatedAt: activity.timestamp };
-    }
-
-    if (activity.type === 'reply') {
-      return { code: 'reply-done', label: 'Reply ready', tool: null, error: null, updatedAt: activity.timestamp };
-    }
-
-    if (activity.type === 'cron') {
-      return { code: activity.status === 'error' ? 'cron-error' : 'cron', label: activity.status === 'error' ? 'Cron error' : 'Cron run', tool: null, error: activity.error || null, updatedAt: activity.timestamp };
-    }
-
-    return null;
-  }
-
-  function updateLiveStatuses(activities) {
-    if (!activities || activities.length === 0) return;
-    for (const activity of activities) {
-      const sessionKey = `${activity.agent}:${activity.sessionName || 'unknown'}`;
-      const next = deriveSessionStatus(activity);
-      if (!next) continue;
-      sessionLiveStatuses.set(sessionKey, {
-        agent: activity.agent,
-        sessionName: activity.sessionName || 'unknown',
-        ...next
-      });
-    }
-  }
-
-  function getAgentStatuses() {
-    const byAgent = new Map();
-    const now = Date.now();
-
-    for (const status of sessionLiveStatuses.values()) {
-      const ts = new Date(status.updatedAt).getTime();
-      if (isNaN(ts)) continue;
-      if ((now - ts) > AGENT_HIDE_AFTER_MS) continue;
-
-      const existing = byAgent.get(status.agent);
-      const existingTs = existing ? new Date(existing.updatedAt).getTime() : 0;
-      if (!existing || ts >= existingTs) {
-        let normalized = { ...status };
-        const isTerminal = ['reply-done', 'tool-done', 'cron', 'cron-error'].includes(normalized.code);
-        if (isTerminal && (now - ts) > STATUS_IDLE_AFTER_MS) {
-          normalized = {
-            ...normalized,
-            code: 'idle',
-            label: 'Idle',
-            tool: null,
-            error: null
-          };
-        }
-        byAgent.set(status.agent, normalized);
-      }
-    }
-
-    return Object.fromEntries(byAgent.entries());
-  }
-
   function emitActivities(activities) {
     if (!activities || activities.length === 0) return;
-    updateLiveStatuses(activities);
-    const payload = { activities, agentStatuses: getAgentStatuses() };
+    sessionStatusTracker.applyActivities(activities);
+    const payload = {
+      activities,
+      agentStatuses: sessionStatusTracker.getAgentStatuses(),
+      sessionStatuses: sessionStatusTracker.getSessionStatuses()
+    };
     for (const listener of subscribers) {
       try {
         listener(payload);
@@ -243,11 +390,13 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
   return {
     init,
     getStatus(since = null) {
-      const agentStatuses = getAgentStatuses();
+      const agentStatuses = sessionStatusTracker.getAgentStatuses();
+      const sessionStatuses = sessionStatusTracker.getSessionStatuses();
       return {
         agents: Object.keys(agentStatuses),
         activities: activityStore.getStatus(since),
         agentStatuses,
+        sessionStatuses,
         system: getSystemStats(),
         updatedAt: new Date().toISOString()
       };
@@ -262,4 +411,9 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
   };
 }
 
-module.exports = { createMonitorStore };
+module.exports = {
+  createMonitorStore,
+  createSessionStatusTracker,
+  inferEventState,
+  normalizeSessionStatus
+};

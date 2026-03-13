@@ -7,6 +7,7 @@ window.AgentMonitor.filters = {
     if (!activity) return false;
     if (activity.type === 'tool' && (activity.toolError || activity.exitCode > 0)) return true;
     if (activity.type === 'cron' && activity.status === 'error') return true;
+    if (activity.type === 'reply' && (activity.status === 'error' || !!activity.error || activity.stopReason === 'error')) return true;
     return false;
   },
 
@@ -60,6 +61,7 @@ window.AgentMonitor.filters = {
     const onlyErrors = refs.filterErrorsOnlyEl.checked;
 
     return activities.filter(a => {
+      if (state.selectedSessionKey && `${a.agent}:${a.sessionName || 'unknown'}` !== state.selectedSessionKey) return false;
       if (agent !== 'all' && a.agent !== agent) return false;
       if (type !== 'all' && a.type !== type) return false;
       if (onlyErrors && !this.isErrorActivity(a)) return false;

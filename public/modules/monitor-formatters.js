@@ -17,14 +17,21 @@ window.AgentMonitor.formatters = {
     return (ms / 1000).toFixed(1) + 's';
   },
 
-  formatTokens(usage) {
+  normalizeUsage(usage) {
     if (!usage || typeof usage !== 'object') return null;
-    let total = usage.totalTokens || usage.total_tokens;
-    if (!total && (typeof usage.input === 'number' || typeof usage.output === 'number')) {
-      total = (usage.input || 0) + (usage.output || 0);
-    }
-    if (!total || isNaN(total)) return null;
-    return Number(total).toLocaleString();
+    const input = Number(usage.input ?? usage.inputTokens ?? usage.input_tokens ?? 0) || 0;
+    const output = Number(usage.output ?? usage.outputTokens ?? usage.output_tokens ?? 0) || 0;
+    const total = Number(usage.totalTokens ?? usage.total_tokens ?? (input + output)) || 0;
+    const cacheRead = Number(usage.cacheRead ?? usage.cache_read ?? 0) || 0;
+    const cacheWrite = Number(usage.cacheWrite ?? usage.cache_write ?? 0) || 0;
+    if (!input && !output && !total && !cacheRead && !cacheWrite) return null;
+    return { input, output, total, cacheRead, cacheWrite };
+  },
+
+  formatTokens(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return numeric.toLocaleString();
   },
 
   getActivityKey(activity) {

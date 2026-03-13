@@ -23,8 +23,29 @@ window.AgentMonitor.render = {
     return this.escapeHtml(date.toLocaleString('zh-CN', { hour12: false }));
   },
 
+  formatStatusDuration(durationMs) {
+    const ms = Number(durationMs || 0);
+    if (!Number.isFinite(ms) || ms <= 0) return '0s';
+    if (ms < 1000) return '<1s';
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  },
+
   createSummaryRow(label, value, className = '') {
     return `<div class="detail-summary-row ${className}"><span class="detail-summary-label">${this.escapeHtml(label)}</span><span class="detail-summary-value">${this.formatValue(value)}</span></div>`;
+  },
+
+  getSessionRecentActivities(sessionKey, limit = 8) {
+    const state = window.AgentMonitor.state;
+    return (state.latestActivities || [])
+      .filter(item => `${item.agent}:${item.sessionName || 'unknown'}` === sessionKey)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, limit);
   },
 
   getDetailPayload(activity) {
@@ -62,12 +83,18 @@ window.AgentMonitor.render = {
     if (!detailBodyEl || !detailDrawerEl) return;
 
     const payload = this.getDetailPayload(activity);
+    const sessionKey = `${activity.agent}:${activity.sessionName || 'unknown'}`;
+    const recentSessionEvents = this.getSessionRecentActivities(sessionKey, 8);
     detailBodyEl.dataset.copyJson = JSON.stringify(payload, null, 2);
     detailBodyEl.dataset.copySource = activity.source || '';
     detailBodyEl.dataset.copySession = activity.sessionName || '';
 
-    const usageText = activity.usage ? formatters.formatTokens(activity.usage) + ' tokens' : '—';
+    const normalizedUsage = formatters.normalizeUsage(activity.usage);
+    const usageText = normalizedUsage?.total ? formatters.formatTokens(normalizedUsage.total) + ' tokens' : '—';
     const durationText = activity.durationMs ? formatters.formatDuration(activity.durationMs) : '—';
+    const providerText = activity.provider || '—';
+    const modelText = activity.model || '—';
+    const stopReasonText = activity.stopReason || '—';
     const aggregateMeta = activity.aggregateCount > 1
       ? `Errors grouped: ${activity.aggregateCount}`
       : (filters.isErrorActivity(activity) ? 'Single error event' : '—');
@@ -95,23 +122,70 @@ window.AgentMonitor.render = {
         </section>`
       : '';
 
+    const sameSessionHtml = recentSessionEvents.length > 0
+      ? `
+        <section class="detail-section">
+          <div class="detail-section-title">Same Session Recent Timeline</div>
+          <div class="same-session-timeline">${recentSessionEvents
+            .map(item => {
+              const itemKey = `${item.agent}:${item.sessionName || 'unknown'}`;
+              const activeClass = item.timestamp === activity.timestamp && item.type === activity.type && item.description === activity.description
+                ? ' is-current'
+                : '';
+              const eventKey = this.escapeHtml(`${item.timestamp}|${item.type}|${item.description || ''}`);
+              return `
+                <button class="same-session-item${activeClass}" type="button" data-session-focus="${this.escapeHtml(itemKey)}" data-open-activity="${eventKey}">
+                  <div class="same-session-item-head">
+                    <span class="same-session-time">${this.formatAbsoluteTime(item.timestamp)}</span>
+                    <span class="same-session-type">${this.escapeHtml(item.type || 'event')}</span>
+                  </div>
+                  <div class="same-session-text">${this.escapeHtml(item.description || item.error || '')}</div>
+                </button>`;
+            })
+            .join('')}</div>
+        </section>`
+      : '';
+
+    const sessionEventCount = recentSessionEvents.length;
+    const sourceFile = activity.source ? String(activity.source).split('/').pop() : '—';
+
     detailBodyEl.innerHTML = `
       <section class="detail-section">
-        <div class="detail-section-title">Summary</div>
-        <div class="detail-summary-grid">
+        <div class="detail-section-title">Overview</div>
+        <div class="detail-summary-grid detail-summary-grid-3up">
           ${this.createSummaryRow('Time', this.formatAbsoluteTime(activity.timestamp))}
           ${this.createSummaryRow('Agent', activity.agent)}
           ${this.createSummaryRow('Session', activity.sessionName)}
           ${this.createSummaryRow('Type', activity.type)}
           ${this.createSummaryRow('Tool', activity.tool)}
-          ${this.createSummaryRow('Model', activity.model)}
+          ${this.createSummaryRow('Recent Session Events', sessionEventCount)}
+        </div>
+      </section>
+
+      <section class="detail-section">
+        <div class="detail-section-title">Model & Usage</div>
+        <div class="detail-summary-grid detail-summary-grid-3up">
+          ${this.createSummaryRow('Provider', providerText)}
+          ${this.createSummaryRow('Model', modelText)}
+          ${this.createSummaryRow('Stop Reason', stopReasonText)}
+          ${this.createSummaryRow('Usage Total', usageText)}
+          ${this.createSummaryRow('Usage Input', normalizedUsage?.input ? formatters.formatTokens(normalizedUsage.input) : '—')}
+          ${this.createSummaryRow('Usage Output', normalizedUsage?.output ? formatters.formatTokens(normalizedUsage.output) : '—')}
+          ${this.createSummaryRow('Cache Read', normalizedUsage?.cacheRead ? formatters.formatTokens(normalizedUsage.cacheRead) : '—')}
+          ${this.createSummaryRow('Cache Write', normalizedUsage?.cacheWrite ? formatters.formatTokens(normalizedUsage.cacheWrite) : '—')}
+          ${this.createSummaryRow('Aggregate', aggregateMeta, activity.aggregateCount > 1 ? 'is-error' : '')}
+        </div>
+      </section>
+
+      <section class="detail-section">
+        <div class="detail-section-title">Execution & Source</div>
+        <div class="detail-summary-grid detail-summary-grid-3up">
           ${this.createSummaryRow('Duration', durationText)}
-          ${this.createSummaryRow('Usage', usageText)}
           ${this.createSummaryRow('Exit Code', activity.exitCode ?? '—', activity.exitCode > 0 ? 'is-error' : '')}
           ${this.createSummaryRow('Tool Status', activity.toolStatus || activity.status)}
-          ${this.createSummaryRow('Stop Reason', activity.stopReason)}
           ${this.createSummaryRow('Error Kind', errorKind, filters.isErrorActivity(activity) ? 'is-error' : '')}
-          ${this.createSummaryRow('Aggregate', aggregateMeta, activity.aggregateCount > 1 ? 'is-error' : '')}
+          ${this.createSummaryRow('Source File', sourceFile)}
+          ${this.createSummaryRow('Source Path', activity.source || '—')}
         </div>
       </section>
 
@@ -127,6 +201,7 @@ window.AgentMonitor.render = {
         </section>` : ''}
 
       ${groupedItemsHtml}
+      ${sameSessionHtml}
 
       <section class="detail-section">
         <div class="detail-section-title">Paths & Copy</div>
@@ -149,6 +224,26 @@ window.AgentMonitor.render = {
     document.getElementById('drawer-overlay')?.classList.add('open');
   },
 
+  updateSessionFocusBar(refs) {
+    const state = window.AgentMonitor.state;
+    if (!refs.sessionFocusBarEl || !refs.sessionFocusLabelEl) return;
+    if (!state.selectedSessionKey) {
+      refs.sessionFocusBarEl.classList.remove('open');
+      refs.sessionFocusLabelEl.textContent = '';
+      return;
+    }
+
+    const focused = (state.sessionStatuses || []).find(item => item.sessionKey === state.selectedSessionKey);
+    const fallbackLabel = state.selectedSessionKey;
+    const recentCount = this.getSessionRecentActivities(state.selectedSessionKey, 12).length;
+    const label = focused
+      ? `${focused.agent} / ${focused.sessionName} / ${focused.code}${recentCount ? ` / ${recentCount} recent` : ''}`
+      : fallbackLabel;
+
+    refs.sessionFocusBarEl.classList.add('open');
+    refs.sessionFocusLabelEl.textContent = label;
+  },
+
   createActivityItem(activity) {
     const state = window.AgentMonitor.state;
     const formatters = window.AgentMonitor.formatters;
@@ -158,6 +253,9 @@ window.AgentMonitor.render = {
     const agentClass = (activity.agent || 'unknown').toUpperCase();
     const activityKey = formatters.getActivityKey(activity);
     div.className = 'activity-item ' + agentClass;
+    if (state.selectedSessionKey && `${activity.agent}:${activity.sessionName || 'unknown'}` === state.selectedSessionKey) {
+      div.classList.add('session-focused-item');
+    }
 
     if (state.newFlashKeys.has(activityKey)) {
       div.classList.add('feed-new');
@@ -212,10 +310,11 @@ window.AgentMonitor.render = {
       detailsRow.appendChild(modelTag);
     }
 
-    if (activity.usage) {
+    const normalizedUsage = formatters.normalizeUsage(activity.usage);
+    if (normalizedUsage?.total) {
       const tokenTag = document.createElement('span');
       tokenTag.className = 'token-tag';
-      tokenTag.textContent = '⚡ ' + formatters.formatTokens(activity.usage) + ' tokens';
+      tokenTag.textContent = '⚡ ' + formatters.formatTokens(normalizedUsage.total) + ' tokens';
       detailsRow.appendChild(tokenTag);
     }
 
@@ -291,7 +390,12 @@ window.AgentMonitor.render = {
       .map(([agent, status]) => {
         const updatedAt = status?.updatedAt ? this.formatAbsoluteTime(status.updatedAt) : '—';
         const isIdle = (status?.code || 'idle') === 'idle';
-        return `<div class="agent-status-card">
+        const duration = this.formatStatusDuration(status?.durationMs);
+        const tool = status?.tool ? `<span>tool: ${this.escapeHtml(status.tool)}</span>` : '';
+        const model = status?.model ? `<span>${this.escapeHtml(status.model)}</span>` : '';
+        const sessionKey = `${agent}:${status?.sessionName || 'unknown'}`;
+        const focusedClass = window.AgentMonitor.state.selectedSessionKey === sessionKey ? ' is-focused' : '';
+        return `<button class="agent-status-card${focusedClass}" data-session-focus="${this.escapeHtml(sessionKey)}" type="button">
           <div class="agent-status-head">
             <span class="agent-tag">${this.escapeHtml(agent)}</span>
             <span class="agent-live-badge ${this.escapeHtml(status?.code || 'idle')}">${this.escapeHtml(status?.code || 'idle')}</span>
@@ -301,7 +405,12 @@ window.AgentMonitor.render = {
             <span>${this.escapeHtml(status?.sessionName || '—')}</span>
             <span>${this.escapeHtml(updatedAt)}</span>
           </div>
-        </div>`;
+          <div class="agent-status-submeta">
+            <span>for ${this.escapeHtml(duration)}</span>
+            ${tool}
+            ${model}
+          </div>
+        </button>`;
       }).join('');
   },
 
@@ -351,6 +460,7 @@ window.AgentMonitor.render = {
     refs.quickFailedToolsEl?.classList.toggle('is-active', state.quickMode === 'failed-tools');
     refs.quickToolErrorsEl?.classList.toggle('is-active', state.quickMode === 'tool-errors');
     refs.quickCronErrorsEl?.classList.toggle('is-active', state.quickMode === 'cron-errors');
+    this.updateSessionFocusBar(refs);
 
     filters.updateMetrics(state.latestActivities, visible, refs);
   },

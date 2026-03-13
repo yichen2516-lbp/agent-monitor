@@ -40,3 +40,28 @@ test('activity parser parses legacy format', () => {
   assert.equal(all[2].type, 'reply');
   assert.equal(all[2].fullText, 'Done');
 });
+
+test('activity parser surfaces assistant provider errors as reply error events', () => {
+  const parser = createActivityParser({ toolCallState: createToolCallState() });
+  const line = JSON.stringify({
+    type: 'message',
+    timestamp: '2026-03-13T11:50:01.360Z',
+    message: {
+      role: 'assistant',
+      content: [],
+      provider: 'opencode',
+      model: 'gpt-5.4',
+      stopReason: 'error',
+      errorMessage: 'An error occurred while processing your request. Please include request ID abc.'
+    }
+  });
+
+  const all = parser.parseLine(line, 'main', 'session3') || [];
+
+  assert.equal(all.length, 1);
+  assert.equal(all[0].type, 'reply');
+  assert.equal(all[0].status, 'error');
+  assert.equal(all[0].stopReason, 'error');
+  assert.match(all[0].description, /An error occurred while processing your request/);
+  assert.match(all[0].error, /request ID abc/);
+});

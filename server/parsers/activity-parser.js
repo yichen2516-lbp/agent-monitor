@@ -6,10 +6,10 @@ function createActivityParser({ toolCallState }) {
   function parseNewMessageFormat(data, agentName, sessionName, sessionKey) {
     const msg = data.message;
     const timestamp = data.timestamp || new Date().toISOString();
-    const model = data.model || data.request?.model || toolCallState.getSessionModel(sessionKey) || null;
-    const provider = data.provider || null;
-    const usage = data.usage || null;
-    const stopReason = data.stopReason || null;
+    const model = data.model || msg.model || data.request?.model || toolCallState.getSessionModel(sessionKey) || null;
+    const provider = data.provider || msg.provider || null;
+    const usage = data.usage || msg.usage || null;
+    const stopReason = data.stopReason || msg.stopReason || null;
     const activities = [];
 
     if (msg.role === 'tool' && msg.toolCallId) {
@@ -34,20 +34,39 @@ function createActivityParser({ toolCallState }) {
       return activities;
     }
 
-    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-      for (const item of msg.content) {
-        if (item.type === 'thinking' && item.thinking) {
-          activities.push({ type: 'thinking', agent: agentName, sessionName, description: `💭 ${item.thinking}`, timestamp, model, provider, usage, stopReason });
-        }
-        if (item.type === 'text' && item.text) {
-          activities.push({ type: 'reply', agent: agentName, sessionName, description: `💬 ${item.text}`, timestamp, fullText: item.text, model, provider, usage, stopReason });
-        }
-        if (item.type === 'toolCall') {
-          const toolName = item.name || 'unknown';
-          const args = item.arguments ? JSON.stringify(item.arguments) : '';
-          const toolCallId = item.id || item.toolCallId;
-          toolCallState.setPending(toolCallId, buildToolCallPayload({ toolName, args, timestamp, model, provider, usage, stopReason }));
-          activities.push({ type: 'tool', agent: agentName, sessionName, tool: toolName, description: `🔧 ${toolName} ${args}`, timestamp, model, provider, usage, stopReason });
+    if (msg.role === 'assistant') {
+      if (msg.errorMessage) {
+        return [{
+          type: 'reply',
+          agent: agentName,
+          sessionName,
+          description: `❌ ${msg.errorMessage}`,
+          fullText: msg.errorMessage,
+          error: msg.errorMessage,
+          status: 'error',
+          provider,
+          model,
+          usage,
+          stopReason,
+          timestamp
+        }];
+      }
+
+      if (Array.isArray(msg.content)) {
+        for (const item of msg.content) {
+          if (item.type === 'thinking' && item.thinking) {
+            activities.push({ type: 'thinking', agent: agentName, sessionName, description: `💭 ${item.thinking}`, timestamp, model, provider, usage, stopReason });
+          }
+          if (item.type === 'text' && item.text) {
+            activities.push({ type: 'reply', agent: agentName, sessionName, description: `💬 ${item.text}`, timestamp, fullText: item.text, model, provider, usage, stopReason });
+          }
+          if (item.type === 'toolCall') {
+            const toolName = item.name || 'unknown';
+            const args = item.arguments ? JSON.stringify(item.arguments) : '';
+            const toolCallId = item.id || item.toolCallId;
+            toolCallState.setPending(toolCallId, buildToolCallPayload({ toolName, args, timestamp, model, provider, usage, stopReason }));
+            activities.push({ type: 'tool', agent: agentName, sessionName, tool: toolName, description: `🔧 ${toolName} ${args}`, timestamp, model, provider, usage, stopReason });
+          }
         }
       }
       return activities.length > 0 ? activities : null;

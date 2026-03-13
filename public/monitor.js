@@ -61,6 +61,7 @@
       refs.filterErrorsOnlyEl.checked = false;
       state.errorAggregateMode = false;
       state.quickMode = 'all';
+      state.selectedSessionKey = null;
       refs.toggleErrorAggregateEl.textContent = 'Error Aggregate: Off';
       render.renderFilteredList(refs);
       uiState.save(refs);
@@ -77,8 +78,37 @@
     refs.quickFailedToolsEl?.addEventListener('click', () => setQuickMode('failed-tools'));
     refs.quickToolErrorsEl?.addEventListener('click', () => setQuickMode('tool-errors'));
     refs.quickCronErrorsEl?.addEventListener('click', () => setQuickMode('cron-errors'));
+    refs.sessionFocusClearEl?.addEventListener('click', () => {
+      state.selectedSessionKey = null;
+      render.renderFilteredList(refs);
+      uiState.save(refs);
+    });
 
     document.addEventListener('click', async (e) => {
+      const activityTrigger = e.target?.closest?.('[data-open-activity]');
+      if (activityTrigger) {
+        const eventKey = activityTrigger.dataset.openActivity || '';
+        const target = state.latestActivities.find(item => `${item.timestamp}|${item.type}|${item.description || ''}` === eventKey);
+        const sessionKey = activityTrigger.dataset.sessionFocus || null;
+        if (sessionKey) state.selectedSessionKey = sessionKey;
+        if (target) {
+          render.openDetail(target);
+        } else {
+          render.renderFilteredList(refs);
+        }
+        uiState.save(refs);
+        return;
+      }
+
+      const focusTrigger = e.target?.closest?.('[data-session-focus]');
+      if (focusTrigger) {
+        const sessionKey = focusTrigger.dataset.sessionFocus || null;
+        state.selectedSessionKey = state.selectedSessionKey === sessionKey ? null : sessionKey;
+        render.renderFilteredList(refs);
+        uiState.save(refs);
+        return;
+      }
+
       if (e.target && e.target.id === 'detail-close') {
         dom.getDetailDrawerEl()?.classList.remove('open');
         refs.drawerOverlayEl?.classList.remove('open');
