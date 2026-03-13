@@ -1,0 +1,3 @@
+{"timestamp":"2026-03-13T05:01:00.000Z","item":{"type":"tool_call","id":"old-tool-1","toolName":"read","arguments":{"file":"README.md"}}}
+{"timestamp":"2026-03-13T05:01:01.000Z","item":{"type":"tool_result","toolCallId":"old-tool-1","durationMs":55,"exitCode":0,"status":"completed","isError":false}}
+{"timestamp":"2026-03-13T05:01:02.000Z","item":{"type":"text","text":"Done"}}

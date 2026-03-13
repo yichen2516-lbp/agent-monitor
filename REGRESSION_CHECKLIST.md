@@ -121,6 +121,30 @@ Evidence:
 
 ---
 
-## 7. Change Log (Document)
+## 7. Automated Regression Coverage
 
+Current lightweight automated checks (`npm test`):
+
+- `test/activity-parser.test.js`
+  - new session message format
+  - legacy flat format
+  - tool call / tool result pairing
+- `test/cron-parser.test.js`
+  - cron line parsing
+- `test/activity-store.test.js`
+  - max activity retention
+  - `since` filtering behavior
+
+Still manual for now:
+- browser rendering correctness
+- detail drawer interactions
+- localStorage persistence
+- polling UX smoothness
+- workspace browser interaction flows
+
+---
+
+## 8. Change Log (Document)
+
+- 2026-03-13: Added minimal automated regression suite (`npm test`) with fixtures for parser/store coverage.
 - 2026-03-12: Initial professional regression plan drafted for open-source workflow.

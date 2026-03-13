@@ -340,6 +340,34 @@ GET /health
 | Cron | `~/.openclaw/cron/runs/*.jsonl` | Scheduled task executions |
 | System | OS APIs | CPU, GPU, Memory, Disk metrics |
 
+### Current Code Structure
+
+```text
+index.js                        # app entry
+server/config.js                # config loading
+server/logger.js                # rolling logs
+server/routes/api.js            # /api /health
+server/routes/workspace.js      # workspace pages
+server/monitor-store.js         # coordinator
+server/parsers/                 # session / cron parsing
+server/store/                   # in-memory activity store
+server/watchers/                # file watchers
+public/modules/                 # frontend state/render/polling modules
+views/                          # monitor/workspace templates
+test/                           # minimal regression tests + fixtures
+```
+
+### Run Regression Tests
+
+```bash
+npm test
+```
+
+当前最小回归覆盖：
+- session activity parser（新格式 / 旧格式）
+- cron parser
+- activity store limit / since 过滤
+
 ---
 
 ## 🗺️ Roadmap
