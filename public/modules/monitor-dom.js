@@ -5,6 +5,9 @@ window.AgentMonitor.dom = {
     return {
       listEl: document.getElementById('activity-list'),
       agentsEl: document.getElementById('agents-list'),
+      agentStatusListEl: document.getElementById('agent-status-list'),
+      connectionPillEl: document.getElementById('connection-pill'),
+      connectionDotEl: document.getElementById('connection-dot'),
       bgCodeEl: document.getElementById('bg-code'),
       filterAgentEl: document.getElementById('filter-agent'),
       filterTypeEl: document.getElementById('filter-type'),

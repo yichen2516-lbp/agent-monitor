@@ -13,6 +13,7 @@ const { getSystemStats, startSystemStatsPolling } = require('./server/system-sta
 const { createMonitorStore } = require('./server/monitor-store');
 const { createApiRouter } = require('./server/routes/api');
 const { createWorkspaceRouter } = require('./server/routes/workspace');
+const { createWsHub } = require('./server/ws-hub');
 
 const app = express();
 const PORT = process.env.PORT || 3450;
@@ -30,7 +31,12 @@ logger.startCleanupScheduler();
 startSystemStatsPolling(2000);
 
 const monitorStore = createMonitorStore({ CONFIG, getSystemStats });
+const wsHub = createWsHub();
 const monitorHtml = fs.readFileSync(path.join(BASE_DIR, 'views', 'monitor.html'), 'utf8');
+
+monitorStore.subscribe((payload) => {
+  wsHub.broadcast('activities', payload);
+});
 
 app.use('/public', express.static(path.join(BASE_DIR, 'public')));
 
@@ -50,7 +56,7 @@ app.use(createWorkspaceRouter({ baseDir: BASE_DIR }));
 
 monitorStore.init();
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════════════════╗
 ║              Agent Monitor 已启动                      ║
@@ -58,8 +64,19 @@ app.listen(PORT, '0.0.0.0', () => {
 ║  本地访问: http://localhost:${PORT}                    ║
 ║  局域网访问: http://0.0.0.0:${PORT}                    ║
 ║  API: http://localhost:${PORT}/api                     ║
+║  WS:  ws://localhost:${PORT}/ws                        ║
 ╚════════════════════════════════════════════════════════╝
   `);
+});
+
+server.on('upgrade', (req, socket) => {
+  if (!req.url || !req.url.startsWith('/ws')) {
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  wsHub.handleUpgrade(req, socket);
 });
 
 module.exports = app;

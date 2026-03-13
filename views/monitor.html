@@ -20,8 +20,9 @@
     <aside class="hud-left">
       <section class="hud-panel">
         <div class="header">
-          <div class="status-dot"></div>
+          <div class="status-dot" id="connection-dot"></div>
           <h1>⚡ Agent Monitor</h1>
+          <div class="connection-pill" id="connection-pill">CONNECTING</div>
           <div class="nav-links">
             <a href="/workspace">📂 Workspace</a>
           </div>
@@ -48,6 +49,13 @@
             <span class="system-label">DISK:</span>
             <span class="system-value-inline" id="disk-value">--</span>
           </div>
+        </div>
+      </section>
+
+      <section class="hud-panel">
+        <div class="panel-mini-title">Agent Live Status</div>
+        <div class="agent-status-list" id="agent-status-list">
+          <div class="empty">Waiting for live status...</div>
         </div>
       </section>
 

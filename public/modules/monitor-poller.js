@@ -4,7 +4,6 @@ window.AgentMonitor.poller = {
   switchToFastMode() {
     const state = window.AgentMonitor.state;
 
-    console.log('[Agent-Monitor] 切换到快速模式 (1秒)');
     state.currentInterval = state.POLL_CONFIG.fastInterval;
 
     if (state.intervalId) clearInterval(state.intervalId);
@@ -12,11 +11,34 @@ window.AgentMonitor.poller = {
 
     if (state.fastModeTimer) clearTimeout(state.fastModeTimer);
     state.fastModeTimer = setTimeout(() => {
-      console.log('[Agent-Monitor] 恢复默认模式 (5秒)');
       state.currentInterval = state.POLL_CONFIG.defaultInterval;
-      clearInterval(state.intervalId);
-      state.intervalId = setInterval(() => this.poll(), state.currentInterval);
+      if (state.intervalId) clearInterval(state.intervalId);
+      state.intervalId = state.pollingEnabled ? setInterval(() => this.poll(), state.currentInterval) : null;
     }, state.POLL_CONFIG.fastDuration);
+  },
+
+  mergeIncomingActivities(incoming, refs) {
+    const state = window.AgentMonitor.state;
+    const render = window.AgentMonitor.render;
+    const formatters = window.AgentMonitor.formatters;
+
+    if (!Array.isArray(incoming) || incoming.length === 0) return;
+
+    incoming.forEach((activity) => state.newFlashKeys.add(formatters.getActivityKey(activity)));
+    const merged = [...incoming, ...state.latestActivities]
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    const dedup = [];
+    const seen = new Set();
+    for (const activity of merged) {
+      const key = formatters.getActivityKey(activity);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      dedup.push(activity);
+      if (dedup.length >= 300) break;
+    }
+
+    render.updateList(dedup, refs);
   },
 
   async poll() {
@@ -24,11 +46,9 @@ window.AgentMonitor.poller = {
     const refs = window.AgentMonitor.dom.getRefs();
     const render = window.AgentMonitor.render;
     const systemPanel = window.AgentMonitor.systemPanel;
-    const formatters = window.AgentMonitor.formatters;
 
     try {
       state.pollCount += 1;
-      console.log('[Agent-Monitor] 轮询 #' + state.pollCount + ' (间隔: ' + state.currentInterval + 'ms)');
 
       const sinceQuery = state.lastServerTimestamp ? ('&since=' + encodeURIComponent(state.lastServerTimestamp)) : '';
       const res = await fetch('/api?t=' + Date.now() + sinceQuery, {
@@ -39,35 +59,19 @@ window.AgentMonitor.poller = {
       if (!res.ok) throw new Error('HTTP ' + res.status);
 
       const data = await res.json();
-      const activityCount = data.activities ? data.activities.length : 0;
-      console.log('[Agent-Monitor] 收到数据:', activityCount, 'activities');
-
       const hadCursor = !!state.lastServerTimestamp;
       if (data.updatedAt) state.lastServerTimestamp = data.updatedAt;
-
-      const incoming = data.activities || [];
-      if (incoming.length > 0 && state.currentInterval !== state.POLL_CONFIG.fastInterval) {
-        this.switchToFastMode();
-      }
+      state.connectionMode = 'polling';
 
       render.updateAgents(data.agents || [], refs);
+      render.updateAgentStatuses(data.agentStatuses || {}, refs);
+      render.updateConnectionStatus(refs);
 
+      const incoming = data.activities || [];
       if (!hadCursor) {
         render.updateList(incoming, refs);
       } else if (incoming.length > 0) {
-        incoming.forEach(a => state.newFlashKeys.add(formatters.getActivityKey(a)));
-        const merged = [...incoming, ...state.latestActivities]
-          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        const dedup = [];
-        const seen = new Set();
-        for (const a of merged) {
-          const k = formatters.getActivityKey(a);
-          if (seen.has(k)) continue;
-          seen.add(k);
-          dedup.push(a);
-          if (dedup.length >= 300) break;
-        }
-        render.updateList(dedup, refs);
+        this.mergeIncomingActivities(incoming, refs);
       }
 
       systemPanel.update(data.system);
@@ -76,10 +80,94 @@ window.AgentMonitor.poller = {
     }
   },
 
-  start() {
+  setPolling(enabled) {
     const state = window.AgentMonitor.state;
-    this.poll();
-    state.intervalId = setInterval(() => this.poll(), state.currentInterval);
-    console.log('[Agent-Monitor] 轮询已启动, 默认间隔: 5秒, intervalId:', state.intervalId);
+    state.pollingEnabled = enabled;
+
+    if (!enabled) {
+      if (state.intervalId) clearInterval(state.intervalId);
+      state.intervalId = null;
+      return;
+    }
+
+    if (!state.intervalId) {
+      state.intervalId = setInterval(() => this.poll(), state.currentInterval);
+    }
+  },
+
+  connectWebSocket() {
+    const state = window.AgentMonitor.state;
+    const refs = window.AgentMonitor.dom.getRefs();
+    const render = window.AgentMonitor.render;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      state.ws = ws;
+
+      ws.addEventListener('open', () => {
+        console.log('[Agent-Monitor] WebSocket connected');
+        state.wsConnected = true;
+        state.wsRetryCount = 0;
+        state.connectionMode = 'ws-live';
+        render.updateConnectionStatus(refs);
+        this.setPolling(false);
+      });
+
+      ws.addEventListener('message', (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message?.event === 'activities') {
+            const activities = message.payload?.activities || [];
+            const statuses = message.payload?.agentStatuses || {};
+            this.mergeIncomingActivities(activities, refs);
+            render.updateAgentStatuses(statuses, refs);
+            state.connectionMode = 'ws-live';
+            render.updateConnectionStatus(refs);
+            if (activities.length > 0) {
+              const latestTimestamp = activities[0]?.timestamp;
+              if (latestTimestamp) state.lastServerTimestamp = latestTimestamp;
+            }
+            return;
+          }
+
+          if (message?.event === 'connected') {
+            state.connectionMode = 'ws-live';
+            render.updateAgents(state.latestAgents || [], refs);
+            render.updateConnectionStatus(refs);
+          }
+        } catch (err) {
+          console.warn('[Agent-Monitor] WS message parse failed:', err.message);
+        }
+      });
+
+      ws.addEventListener('close', () => {
+        console.warn('[Agent-Monitor] WebSocket closed, fallback to polling');
+        state.wsConnected = false;
+        state.connectionMode = 'polling';
+        render.updateConnectionStatus(refs);
+        this.setPolling(true);
+        const retryDelay = Math.min(10000, 1000 * Math.max(1, state.wsRetryCount + 1));
+        state.wsRetryCount += 1;
+        setTimeout(() => this.connectWebSocket(), retryDelay);
+      });
+
+      ws.addEventListener('error', (err) => {
+        console.warn('[Agent-Monitor] WebSocket error:', err.message || 'unknown');
+      });
+    } catch (err) {
+      console.warn('[Agent-Monitor] WebSocket init failed:', err.message);
+      state.connectionMode = 'polling';
+      render.updateConnectionStatus(refs);
+      this.setPolling(true);
+    }
+  },
+
+  start() {
+    this.poll().then(() => {
+      this.setPolling(true);
+      this.connectWebSocket();
+    });
   }
 };

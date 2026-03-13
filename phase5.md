@@ -2,7 +2,7 @@
 
 ## 定位
 
-Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增强阶段**。
+Phase 5 不再是"结构性重构"，而是 **产品体验与可观察性增强阶段**。
 
 前面 Phase 1~4 已完成的重点：
 - 拆薄入口与路由层
@@ -39,7 +39,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
   - 增加 `Error Kind`、`Tool Status`、`Stop Reason` 等字段
 
 代表提交：
-- `19e9924` — `feat(monitor): improve error investigation workflows`
+- `19e9924` - `feat(monitor): improve error investigation workflows`
 
 #### P5-C：详情交互与可读性优化（已落地第一版）
 已完成内容：
@@ -55,7 +55,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - copy 交互已接入
 
 说明：
-- 这一块已基本达到“可用且顺手”的第一版目标
+- 这一块已基本达到"可用且顺手"的第一版目标
 - 但 usage 展示仍然偏粗，后续还能继续细化
 
 #### P5-D：Workspace Browser 产品化增强（已落地第一版）
@@ -73,11 +73,11 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - 二进制文件不再显示乱码文本，改为 binary notice
 
 代表提交：
-- `cf2b2b4` — `feat(workspace): UX/UI overhaul with search, state persistence, unified HUD style`
-- `ccc46df` — `fix(workspace): correct sidebar styling and search visibility`
-- `6fa1adf` — `fix(workspace): render images and guard binary previews`
-- `e915430` — `fix(workspace): avoid inline base64 image previews`
-- `e6b8159` — `fix(workspace): show missing file errors inside viewer shell`
+- `cf2b2b4` - `feat(workspace): UX/UI overhaul with search, state persistence, unified HUD style`
+- `ccc46df` - `fix(workspace): correct sidebar styling and search visibility`
+- `6fa1adf` - `fix(workspace): render images and guard binary previews`
+- `e915430` - `fix(workspace): avoid inline base64 image previews`
+- `e6b8159` - `fix(workspace): show missing file errors inside viewer shell`
 
 ### 已暴露/已记录的问题
 
@@ -89,7 +89,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - 当 workspace 规模继续扩大时，仍有再次卡顿风险
 
 结论：
-- **P5-D 已经从“可用性问题”走到“性能问题”**
+- **P5-D 已经从"可用性问题"走到"性能问题"**
 - 下一步不应继续只修样式，而应该开始做减载
 
 ---
@@ -115,12 +115,12 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 ## P5-A：监控视图增强
 
 ### 目标
-让主监控页更适合“盯盘”和“排错”，不只是活动列表滚动。
+让主监控页更适合"盯盘"和"排错"，不只是活动列表滚动。
 
 ### 候选项
 
 #### 1. Agent 维度视图
-当前：所有活动混在一个 feed 中  
+当前：所有活动混在一个 feed 中
 目标：支持按 agent 快速聚焦
 
 可选实现：
@@ -129,7 +129,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - 每个 agent 最近活动时间显示
 
 #### 2. Session 维度视图
-当前：session 只作为活动卡片里的一个字段  
+当前：session 只作为活动卡片里的一个字段
 目标：支持按 session 追踪完整上下文
 
 可选实现：
@@ -138,7 +138,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - session 最近 N 条活动聚合展示
 
 #### 3. 类型视图增强
-当前：tool / reply / thinking / cron 仅靠筛选器区分  
+当前：tool / reply / thinking / cron 仅靠筛选器区分
 目标：支持更清楚的信息层级
 
 可选实现：
@@ -147,7 +147,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - tool call / tool result 成对视觉展示
 
 ### 预期收益
-- 更快锁定“哪个 agent / 哪个 session / 哪类事件”有问题
+- 更快锁定"哪个 agent / 哪个 session / 哪类事件"有问题
 - 降低活动流刷屏时的信息噪音
 
 ---
@@ -155,7 +155,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 ## P5-B：错误与异常定位增强
 
 ### 目标
-让 Agent Monitor 从“看日志”升级到“快速识别异常模式”。
+让 Agent Monitor 从"看日志"升级到"快速识别异常模式"。
 
 ### 状态
 **第一版已完成，后续进入精修阶段。**
@@ -198,7 +198,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 ## P5-D：Workspace Browser 产品化增强
 
 ### 目标
-把 workspace 页面从“能看”升级到“好用”。
+把 workspace 页面从"能看"升级到"好用"。
 
 ### 状态
 **第一版已完成，但性能与稳定性仍需第二轮。**
@@ -218,7 +218,7 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - 搜索改为基于轻量索引，而不是全 DOM 遍历
 
 #### 2. 文件查看增强第二轮
-- 大文本文件增加截断与“继续展开”机制
+- 大文本文件增加截断与"继续展开"机制
 - 图片增加自然尺寸 / 分辨率信息
 - 非文本文件增加下载/原文件打开入口（如果需要）
 
@@ -229,14 +229,14 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 
 ### 预期收益
 - 真正解决 Safari 慢、页面卡顿风险
-- 让 workspace 不只是“能用”，而是“长期可挂着用”
+- 让 workspace 不只是"能用"，而是"长期可挂着用"
 
 ---
 
 ## P5-E：性能与可观察性增强
 
 ### 目标
-在功能稳定基础上，把“更稳、更省、更可追踪”补上。
+在功能稳定基础上，把"更稳、更省、更可追踪"补上。
 
 ### 候选项
 
@@ -250,61 +250,138 @@ Phase 5 不再是“结构性重构”，而是 **产品体验与可观察性增
 - 大量活动下的渲染性能优化
 - 过滤器变更时减少 DOM 抖动
 
-#### 3. Polling 策略优化
-- 根据页面活跃状态降频
-- 页面失焦时降低刷新率
-- 可选的“暂停刷新”按钮
+#### 3. 实时推送链路升级（高优先级新增）
+目标：从 HTTP polling 逐步切到 WebSocket push，让活动、状态、错误更实时地到达前端。
 
-#### 4. 向 WebSocket 演进的预研
-不是现在必须做，但可以记录方向：
-- 先保留 polling
-- 后续评估 websocket 推送是否值得
+建议方向：
+- 服务端新增 WebSocket 通道（保留 `/api` 作为回退）
+- monitor-store 在新活动写入时主动广播增量事件
+- 前端从"定时全量/增量拉取"切到"连接后接收推送 + 必要时补拉"
+- 页面失焦 / 重连 / 首次加载时仍保留兜底同步逻辑
+
+建议分两步实现：
+1. **Phase 5.5 / Step 1：Hybrid 模式**
+   - 首屏仍走一次 HTTP 初始化
+   - 后续增量改用 WebSocket push
+   - 断线自动重连，重连后用 since 游标补洞
+2. **Phase 5.5 / Step 2：Push-first 模式**
+   - WebSocket 成为主链路
+   - polling 仅作 fallback / debug 开关
+
+关键收益：
+- 新消息/工具事件到达更实时
+- 减少无意义轮询
+- 后续"进行中状态"能力更容易做
+
+#### 4. Agent 进行中状态可视化（高优先级新增）
+目标：不要只显示"发生过什么"，还要显示"现在正在干什么"。
+
+Yichen 提出的核心判断场景：
+- 不回复时，到底是：
+  - 正在发起/等待 LLM 请求
+  - 正在 thinking
+  - 正在调用 tool
+  - tool 执行中
+  - tool 执行失败
+  - 会话空闲 / 已结束
+
+##### 可实现程度（当前判断）
+**可以做到第一版，而且价值很高，但要接受"可观测性边界"。**
+
+可以比较可靠拿到的状态：
+- `thinking`
+- `tool_call_pending`
+- `tool_running`
+- `tool_failed`
+- `reply_streaming` / `reply_done`
+- `idle`
+- `session_ended`
+
+通过什么实现：
+- 继续利用 session jsonl 流里的 message / toolCall / tool result / stopReason / error 事件
+- 结合现有 tool-call-state 做"当前进行中状态机"
+- 在 monitor-store 中为每个 session 维护一个 `liveStatus`
+- 前端显示：
+  - Agent 当前状态 badge
+  - 最近状态切换时间
+  - 当前 tool 名称 / 持续时长
+  - 最近一次错误原因（若有）
+
+##### 目前难以 100% 准确拿到的状态
+- **"正在等待 LLM 网络请求返回"** 这类 provider 内部网络层状态
+- 如果 OpenClaw / provider 层没有显式事件，monitor 很难区分：
+  - 真正在等远端 LLM
+  - 本地 still thinking but no new token
+  - provider 卡住 / 网络抖动
+
+##### 可行折中方案
+即使没有 provider 内部 hook，也能做一版足够有用的状态：
+- 当 assistant turn 已开始、但尚未出现 toolCall / reply 完成：显示 `thinking / waiting-model`
+- 若超过阈值（如 10s / 20s）仍无后续事件：标记为 `possibly waiting provider`
+- 若出现 error / abort / timeout：标记 `provider_or_network_error`
+
+也就是说：
+- **"绝对精确的网络请求状态"未必能直接拿到**
+- **"对用户足够有解释力的进行中状态"完全可以做**
+
+##### 建议实现阶段
+1. **Stage A：Session live status（推荐先做）**
+   - 每个 session 一条当前状态
+   - 状态 badge + 时长 + 当前 tool
+2. **Stage B：Agent 汇总状态**
+   - 每个 agent 卡片显示"最近活跃 session 正在干什么"
+3. **Stage C：Provider-aware（需调研 OpenClaw 事件）**
+   - 如果 OpenClaw 有 provider request lifecycle 事件，则接进去
+   - 没有的话，维持 heuristic 判断
 
 ### 预期收益
 - 更适合长期挂着监控
 - 页面更稳，资源消耗更低
+- 用户能更快判断"没回复到底卡在哪一步"
 
 ---
 
 ## 建议优先级（更新后）
 
 ### 当前建议优先级
-1. **P5-D 第二轮：Workspace 性能减载**
+1. **P5.5：WebSocket push + Session live status**
 2. **P5-C 第二轮：drawer / usage 信息细化**
 3. **P5-A：Agent / Session 维度视图增强**
-4. **P5-E：前端渲染与 polling 优化**
+4. **P5-D 第二轮收尾：workspace 继续打磨**
 
 ### 为什么这样排
-- monitor 主页这轮已经从“能看”升级到“好排错”
-- 当前最明显的实际痛点，已经转移到 **workspace 的性能与稳定性**
-- 如果不先处理 P5-D 第二轮，workspace 页后面会持续冒出“卡 / 慢 / 树太重”的问题
+- Yichen 已明确提出"不要 polling，要更实时"和"想知道 agent 当前正在干什么"
+- 这两个需求会直接改变 monitor 的主体验，优先级已经高于纯样式/纯局部优化
+- WebSocket push 与 live status 一起做，性价比最高：底层链路改一次，前端状态展示一起受益
 
 ---
 
 ## 建议的下一批任务（更新版）
 
-### Task 5：Workspace 树减载
-- 默认只展开有限层级
-- 深层目录按需加载或按需渲染
-- 避免首页生成过重 DOM
+### Task 9：WebSocket hybrid push
+- 首屏 HTTP 初始化
+- 增量活动改为 WebSocket 推送
+- 断线自动重连 + since 补洞
 
-### Task 6：Workspace 搜索轻量化
-- 从“遍历所有 DOM 节点”改为“基于索引过滤”
-- 降低 Safari 卡顿概率
+### Task 10：Session live status 状态机
+- 为每个 session 维护当前状态（thinking / tool running / waiting-model / error / idle）
+- 记录状态切换时间与当前 tool
+- 输出给前端用于 badge / 摘要展示
 
-### Task 7：Drawer usage 细化
+### Task 11：Drawer usage 细化
 - input / output / total tokens 分开展示
 - provider / model / stopReason 归一化展示
 
-### Task 8：Session 视图增强
+### Task 12：Agent / Session 视图增强
 - 增加 session 过滤器或 session drill-down
+- Agent 卡片显示“当前正在做什么”
 - 让排查一段完整会话更顺手
 
 ---
 
 ## 验收标准
 
-Phase 5 不适合用“文件有没有拆完”来验收，而应该用用户价值来验收：
+Phase 5 不适合用"文件有没有拆完"来验收，而应该用用户价值来验收：
 
 ### 好的验收方式
 - 出错时能否更快定位问题

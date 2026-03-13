@@ -10,6 +10,13 @@ window.AgentMonitor.state = {
   currentInterval: 5000,
   fastModeTimer: null,
   intervalId: null,
+  pollingEnabled: true,
+  ws: null,
+  wsConnected: false,
+  wsRetryCount: 0,
+  latestAgents: [],
+  agentStatuses: {},
+  connectionMode: 'connecting',
   quickMode: 'all',
   STORAGE_KEY: 'agent-monitor.ui-state.v2',
   POLL_CONFIG: {

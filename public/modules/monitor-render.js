@@ -264,9 +264,52 @@ window.AgentMonitor.render = {
     return div;
   },
 
+  updateConnectionStatus(refs) {
+    const state = window.AgentMonitor.state;
+    if (refs.connectionPillEl) {
+      refs.connectionPillEl.textContent = state.connectionMode === 'ws-live' ? 'WS LIVE' : state.connectionMode === 'polling' ? 'POLLING' : 'CONNECTING';
+      refs.connectionPillEl.className = 'connection-pill ' + state.connectionMode;
+    }
+    if (refs.connectionDotEl) {
+      refs.connectionDotEl.className = 'status-dot ' + state.connectionMode;
+    }
+  },
+
+  updateAgentStatuses(statuses, refs) {
+    const state = window.AgentMonitor.state;
+    state.agentStatuses = statuses || {};
+
+    if (!refs.agentStatusListEl) return;
+    const entries = Object.entries(state.agentStatuses);
+    if (entries.length === 0) {
+      refs.agentStatusListEl.innerHTML = '<div class="empty">Waiting for live status...</div>';
+      return;
+    }
+
+    refs.agentStatusListEl.innerHTML = entries
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+      .map(([agent, status]) => {
+        const updatedAt = status?.updatedAt ? this.formatAbsoluteTime(status.updatedAt) : '—';
+        const isIdle = (status?.code || 'idle') === 'idle';
+        return `<div class="agent-status-card">
+          <div class="agent-status-head">
+            <span class="agent-tag">${this.escapeHtml(agent)}</span>
+            <span class="agent-live-badge ${this.escapeHtml(status?.code || 'idle')}">${this.escapeHtml(status?.code || 'idle')}</span>
+          </div>
+          ${isIdle ? '' : `<div class="agent-status-label">${this.escapeHtml(status?.label || 'Idle')}</div>`}
+          <div class="agent-status-meta">
+            <span>${this.escapeHtml(status?.sessionName || '—')}</span>
+            <span>${this.escapeHtml(updatedAt)}</span>
+          </div>
+        </div>`;
+      }).join('');
+  },
+
   updateAgents(agents, refs) {
     const uiState = window.AgentMonitor.uiState;
+    const state = window.AgentMonitor.state;
 
+    state.latestAgents = agents || [];
     refs.agentsEl.innerHTML = '';
     agents.forEach(agent => {
       const tag = document.createElement('span');

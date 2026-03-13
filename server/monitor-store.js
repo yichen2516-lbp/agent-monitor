@@ -9,6 +9,10 @@ const { createSessionWatcher } = require('./watchers/session-watcher');
 
 function createMonitorStore({ CONFIG, getSystemStats }) {
   const activeSessions = new Map();
+  const subscribers = new Set();
+  const sessionLiveStatuses = new Map();
+  const STATUS_IDLE_AFTER_MS = 15 * 1000;
+  const AGENT_HIDE_AFTER_MS = 20 * 60 * 1000;
   const toolCallState = createToolCallState();
   const activityParser = createActivityParser({ toolCallState });
   const activityStore = createActivityStore({
@@ -84,7 +88,11 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
 
       for (const line of lines) {
         const activities = parseLine(line, agent, sessionName);
-        if (activities) activityStore.append(activities, source, filePath);
+        if (activities) {
+          const enrichedActivities = activities.map(activity => ({ ...activity, source: filePath }));
+          activityStore.append(activities, source, filePath);
+          emitActivities(enrichedActivities);
+        }
       }
 
       console.log(`[Agent-Monitor] Loaded ${source === 'cron' ? 'cron' : agent}: ${path.basename(filePath)} (${lines.length} lines)`);
@@ -104,7 +112,11 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
     const sessionWatcher = createSessionWatcher({
       sessionInfo: { ...sessionInfo, sessionName: loaded.sessionName, initialSize: loaded.size },
       parseLine: activityParser.parseLine,
-      onActivities: (activity) => activityStore.appendIncremental(activity),
+      onActivities: (activity) => {
+        const enriched = { ...activity, source: sessionInfo.path };
+        activityStore.appendIncremental(enriched);
+        emitActivities([enriched]);
+      },
       onError: (err, agentName) => console.error(`[Agent-Monitor] Watch error ${agentName}:`, err.message)
     });
 
@@ -114,6 +126,91 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
       lastSize: loaded.size,
       sessionName: loaded.sessionName
     });
+  }
+
+  function deriveSessionStatus(activity) {
+    if (!activity) return null;
+
+    if (activity.type === 'thinking') {
+      return { code: 'thinking', label: 'Thinking', tool: null, error: null, updatedAt: activity.timestamp };
+    }
+
+    if (activity.type === 'tool') {
+      if (activity.toolError || Number(activity.exitCode) > 0) {
+        return { code: 'tool-failed', label: `Tool failed · ${activity.tool || 'unknown'}`, tool: activity.tool || null, error: activity.error || activity.description || null, updatedAt: activity.timestamp };
+      }
+      if (activity.exitCode !== undefined || activity.durationMs || activity.toolStatus) {
+        return { code: 'tool-done', label: `Tool done · ${activity.tool || 'unknown'}`, tool: activity.tool || null, error: null, updatedAt: activity.timestamp };
+      }
+      return { code: 'tool-running', label: `Tool running · ${activity.tool || 'unknown'}`, tool: activity.tool || null, error: null, updatedAt: activity.timestamp };
+    }
+
+    if (activity.type === 'reply') {
+      return { code: 'reply-done', label: 'Reply ready', tool: null, error: null, updatedAt: activity.timestamp };
+    }
+
+    if (activity.type === 'cron') {
+      return { code: activity.status === 'error' ? 'cron-error' : 'cron', label: activity.status === 'error' ? 'Cron error' : 'Cron run', tool: null, error: activity.error || null, updatedAt: activity.timestamp };
+    }
+
+    return null;
+  }
+
+  function updateLiveStatuses(activities) {
+    if (!activities || activities.length === 0) return;
+    for (const activity of activities) {
+      const sessionKey = `${activity.agent}:${activity.sessionName || 'unknown'}`;
+      const next = deriveSessionStatus(activity);
+      if (!next) continue;
+      sessionLiveStatuses.set(sessionKey, {
+        agent: activity.agent,
+        sessionName: activity.sessionName || 'unknown',
+        ...next
+      });
+    }
+  }
+
+  function getAgentStatuses() {
+    const byAgent = new Map();
+    const now = Date.now();
+
+    for (const status of sessionLiveStatuses.values()) {
+      const ts = new Date(status.updatedAt).getTime();
+      if (isNaN(ts)) continue;
+      if ((now - ts) > AGENT_HIDE_AFTER_MS) continue;
+
+      const existing = byAgent.get(status.agent);
+      const existingTs = existing ? new Date(existing.updatedAt).getTime() : 0;
+      if (!existing || ts >= existingTs) {
+        let normalized = { ...status };
+        const isTerminal = ['reply-done', 'tool-done', 'cron', 'cron-error'].includes(normalized.code);
+        if (isTerminal && (now - ts) > STATUS_IDLE_AFTER_MS) {
+          normalized = {
+            ...normalized,
+            code: 'idle',
+            label: 'Idle',
+            tool: null,
+            error: null
+          };
+        }
+        byAgent.set(status.agent, normalized);
+      }
+    }
+
+    return Object.fromEntries(byAgent.entries());
+  }
+
+  function emitActivities(activities) {
+    if (!activities || activities.length === 0) return;
+    updateLiveStatuses(activities);
+    const payload = { activities, agentStatuses: getAgentStatuses() };
+    for (const listener of subscribers) {
+      try {
+        listener(payload);
+      } catch (err) {
+        console.error('[Agent-Monitor] subscriber emit failed:', err.message);
+      }
+    }
   }
 
   function init() {
@@ -146,15 +243,21 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
   return {
     init,
     getStatus(since = null) {
+      const agentStatuses = getAgentStatuses();
       return {
-        agents: Array.from(activeSessions.keys()),
+        agents: Object.keys(agentStatuses),
         activities: activityStore.getStatus(since),
+        agentStatuses,
         system: getSystemStats(),
         updatedAt: new Date().toISOString()
       };
     },
     getActiveSessionsCount() {
       return activeSessions.size;
+    },
+    subscribe(listener) {
+      subscribers.add(listener);
+      return () => subscribers.delete(listener);
     }
   };
 }
