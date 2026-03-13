@@ -40,6 +40,56 @@ window.AgentMonitor.render = {
     return `<div class="detail-summary-row ${className}"><span class="detail-summary-label">${this.escapeHtml(label)}</span><span class="detail-summary-value">${this.formatValue(value)}</span></div>`;
   },
 
+  getInvestigationVerdict(activity, recentSessionEvents = []) {
+    const latestSessionEvent = recentSessionEvents[0] || activity;
+
+    if (activity.type === 'reply' && (activity.status === 'error' || activity.stopReason === 'error' || activity.error)) {
+      return {
+        tone: 'error',
+        title: 'Provider/API error surfaced before a normal reply',
+        detail: activity.error || activity.fullText || activity.description || 'The provider returned an error before a usable assistant reply.'
+      };
+    }
+
+    if (activity.type === 'tool' && (activity.toolError || Number(activity.exitCode) > 0)) {
+      return {
+        tone: 'error',
+        title: 'Tool failed during session execution',
+        detail: activity.error || activity.description || 'A tool call failed and likely interrupted normal reply flow.'
+      };
+    }
+
+    if (activity.type === 'reply' && !activity.error && activity.stopReason !== 'error') {
+      return {
+        tone: 'success',
+        title: 'Reply completed normally',
+        detail: 'The session reached an assistant reply event without an explicit error on this step.'
+      };
+    }
+
+    if (latestSessionEvent.type === 'thinking') {
+      return {
+        tone: 'pending',
+        title: 'Session is still thinking or waiting on the model',
+        detail: 'The latest visible event in this session is a thinking step; the run may still be in progress.'
+      };
+    }
+
+    if (latestSessionEvent.type === 'tool' && latestSessionEvent.exitCode === undefined && !latestSessionEvent.toolError) {
+      return {
+        tone: 'pending',
+        title: 'Session is in a tool execution phase',
+        detail: latestSessionEvent.tool ? `Current tool context: ${latestSessionEvent.tool}` : 'A tool call has started and no terminal result is visible yet.'
+      };
+    }
+
+    return {
+      tone: 'neutral',
+      title: 'No stronger verdict yet',
+      detail: 'This event is visible and inspectable, but the monitor cannot safely infer a stronger conclusion from current session evidence.'
+    };
+  },
+
   getSessionRecentActivities(sessionKey, limit = 8) {
     const state = window.AgentMonitor.state;
     return (state.latestActivities || [])
@@ -148,8 +198,16 @@ window.AgentMonitor.render = {
 
     const sessionEventCount = recentSessionEvents.length;
     const sourceFile = activity.source ? String(activity.source).split('/').pop() : '—';
+    const verdict = this.getInvestigationVerdict(activity, recentSessionEvents);
 
     detailBodyEl.innerHTML = `
+      <section class="detail-section">
+        <div class="investigation-verdict investigation-verdict-${this.escapeHtml(verdict.tone)}">
+          <div class="investigation-verdict-title">${this.escapeHtml(verdict.title)}</div>
+          <div class="investigation-verdict-detail">${this.escapeHtml(verdict.detail)}</div>
+        </div>
+      </section>
+
       <section class="detail-section">
         <div class="detail-section-title">Overview</div>
         <div class="detail-summary-grid detail-summary-grid-3up">
