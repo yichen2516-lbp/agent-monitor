@@ -9,6 +9,7 @@
 <body class="workspace-shell file-view-page {{BODY_CLASS}}" data-agent="{{AGENT}}" data-page="workspace-file" data-current-file="{{CURRENT_FILE_PATH}}">
   <div class="bg-grid"></div>
   <div class="bg-vig"></div>
+  <div class="mobile-sidebar-backdrop" id="mobile-sidebar-backdrop" hidden></div>
 
   <div class="workspace-layout">
     <aside class="workspace-sidebar hud-panel" id="workspace-sidebar">
@@ -27,14 +28,18 @@
         <div class="search-meta"><span id="search-count">{{FILE_COUNT}}</span> items</div>
       </div>
 
+      <div class="sidebar-section-label">Recent</div>
+      <div class="recent-files-container" id="recent-files-container"></div>
+
       <div class="sidebar-section-label">Files</div>
+      <div class="search-results-container" id="search-results-container" hidden></div>
       <div class="file-tree-container" id="file-tree-container">{{FILE_TREE}}</div>
     </aside>
 
     <main class="workspace-main" id="workspace-main">
       <header class="workspace-header hud-panel">
         <div class="header-left">
-          <button class="sidebar-open mobile-only" id="sidebar-open-btn" type="button">📂</button>
+          <button class="sidebar-open mobile-only" id="sidebar-open-btn" type="button">📂 Files</button>
           <div>
             <div class="header-kicker">{{AGENT_EMOJI}} {{AGENT_NAME}}</div>
             <h1>{{FILE_NAME}}</h1>
@@ -45,6 +50,14 @@
           <a href="/workspace?agent={{AGENT}}" class="nav-link">Workspace Home</a>
         </div>
       </header>
+
+      <section class="mobile-file-picker hud-panel mobile-only">
+        <div class="mobile-file-picker-copy">
+          <div class="panel-title">Files</div>
+          <div class="mobile-file-picker-text">Open the file browser, recent files, and search.</div>
+        </div>
+        <button class="sidebar-open mobile-file-picker-btn" id="sidebar-open-btn-inline" type="button">Open File Picker</button>
+      </section>
 
       <section class="workspace-breadcrumb hud-panel">
         <div class="panel-title">Path</div>
@@ -65,11 +78,16 @@
             <span class="meta-badge">{{FILE_TYPE}}</span>
           </div>
         </div>
+        <div class="file-top-actions">
+          {{FILE_NAVIGATION}}
+          <a href="{{RAW_FILE_URL}}" class="nav-link" target="_blank" rel="noreferrer">Open raw</a>
+        </div>
         {{CONTENT_HTML}}
       </section>
     </main>
   </div>
 
+  <script id="workspace-search-index" type="application/json">{{SEARCH_INDEX_JSON}}</script>
   <script src="/public/workspace.js?v=20260313-p5d2"></script>
 </body>
 </html>

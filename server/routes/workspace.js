@@ -6,22 +6,19 @@ const {
   getValidWorkspaceAgent,
   isPathSafe,
   getFileList,
+  getDirectoryEntries,
   formatFileSize,
   getFileIcon,
-  generateWorkspaceTree
+  generateWorkspaceTree,
+  flattenWorkspace,
+  getAncestorPaths,
+  escapeHtml
 } = require('../workspace');
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']);
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.js', '.ts', '.jsx', '.tsx', '.py', '.sh', '.yml', '.yaml', '.html', '.css', '.sql', '.csv', '.log', '.xml']);
-
-function escapeHtml(value = '') {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+const SEARCH_INDEX_LIMIT = 5000;
+const TEXT_PREVIEW_CHAR_LIMIT = 120000;
 
 function renderTemplate(template, data) {
   return template.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (_, key) => {
@@ -68,21 +65,70 @@ function getImageMimeType(fileName) {
     : 'image/jpeg';
 }
 
-function renderImageContent(agentKey, filePath, fileName) {
+function renderImageContent(agentKey, filePath, fileName, stat) {
   const rawUrl = `/workspace/raw/${encodeURIComponent(filePath)}?agent=${encodeURIComponent(agentKey)}`;
-  return `<div class="file-view-content image-preview-wrap"><img class="file-image-preview" src="${rawUrl}" alt="${escapeHtml(fileName)}" loading="lazy" /></div>`;
+  return `
+    <div class="file-view-content image-preview-wrap">
+      <div class="image-preview-meta">Image preview · ${escapeHtml(formatFileSize(stat.size))}</div>
+      <img class="file-image-preview" src="${rawUrl}" alt="${escapeHtml(fileName)}" loading="lazy" />
+    </div>`;
 }
 
-function renderBinaryContent(fileName, size) {
+function renderBinaryContent(fileName, size, rawUrl) {
   return `
     <div class="file-view-content binary-file-notice">
       <div class="binary-file-title">Binary preview is not available</div>
       <div class="binary-file-text">${escapeHtml(fileName)} is not a text file, so the viewer will not render it as plain text.</div>
       <div class="binary-file-meta">Size: ${escapeHtml(formatFileSize(size))}</div>
+      <div class="content-actions"><a href="${rawUrl}" class="nav-link" target="_blank" rel="noreferrer">Open raw file</a></div>
     </div>`;
 }
 
-function renderFileViewPage({ template, agents, agentKey, config, fileTree, fileCount, dirCount, fileName, filePath, fileType, fileSize, fileIcon, breadcrumbs, contentHtml, statusCode = 200 }) {
+function makeSearchIndexJson(files, agentKey) {
+  const flattened = flattenWorkspace(files, { limit: SEARCH_INDEX_LIMIT });
+  return JSON.stringify({
+    files: flattened.files,
+    truncated: flattened.truncated,
+    limit: SEARCH_INDEX_LIMIT,
+    agent: agentKey
+  })
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+
+function buildWorkspaceTree(files, agentKey, currentFile = '') {
+  const expandedPaths = new Set(getAncestorPaths(currentFile));
+  return generateWorkspaceTree(files, agentKey, {
+    initialDepth: currentFile ? 0 : 1,
+    expandedPaths,
+    alwaysExpandedPaths: expandedPaths
+  });
+}
+
+function makeNavLink(href, label, kind = '') {
+  return `<a href="${href}" class="nav-link ${kind}">${label}</a>`;
+}
+
+function buildFileNavigation(files, agentKey, currentFilePath) {
+  const flattened = flattenWorkspace(files);
+  const fileList = flattened.files;
+  const currentIndex = fileList.findIndex((item) => item.path === currentFilePath);
+  const prev = currentIndex > 0 ? fileList[currentIndex - 1] : null;
+  const next = currentIndex >= 0 && currentIndex < fileList.length - 1 ? fileList[currentIndex + 1] : null;
+
+  return {
+    prev,
+    next,
+    html: `
+      <div class="file-nav-row">
+        ${prev ? makeNavLink(`/workspace/view/${encodeURIComponent(prev.path)}?agent=${encodeURIComponent(agentKey)}`, `← Prev · ${escapeHtml(prev.name)}`) : '<span class="nav-link is-disabled">← Prev</span>'}
+        ${next ? makeNavLink(`/workspace/view/${encodeURIComponent(next.path)}?agent=${encodeURIComponent(agentKey)}`, `Next · ${escapeHtml(next.name)} →`) : '<span class="nav-link is-disabled">Next →</span>'}
+      </div>`
+  };
+}
+
+function renderFileViewPage({ template, agents, agentKey, config, fileTree, fileCount, dirCount, fileName, filePath, fileType, fileSize, fileIcon, breadcrumbs, contentHtml, files, navHtml = '', rawFileUrl = '#', statusCode = 200 }) {
   const agentTabs = Object.entries(agents).map(([key, cfg]) => {
     const isActive = key === agentKey;
     const activeStyle = isActive ? `style="background: linear-gradient(180deg, rgba(0,229,255,0.14), rgba(0,229,255,0.08)); border-color: rgba(0,229,255,0.6); color: #e0fdff;"` : '';
@@ -110,10 +156,30 @@ function renderFileViewPage({ template, agents, agentKey, config, fileTree, file
     FILE_TYPE: escapeHtml(fileType),
     BREADCRUMBS: breadcrumbs,
     CONTENT_HTML: contentHtml,
-    CURRENT_FILE_PATH: escapeHtml(filePath)
+    CURRENT_FILE_PATH: escapeHtml(filePath),
+    SEARCH_INDEX_JSON: makeSearchIndexJson(files, agentKey),
+    FILE_NAVIGATION: navHtml,
+    RAW_FILE_URL: rawFileUrl
   });
 
   return { html, statusCode };
+}
+
+function buildTextContent({ content, ext, stat, isFullView, fullViewUrl, compactViewUrl, rawFileUrl }) {
+  const isTruncated = !isFullView && content.length > TEXT_PREVIEW_CHAR_LIMIT;
+  const previewText = isTruncated ? content.slice(0, TEXT_PREVIEW_CHAR_LIMIT) : content;
+  const metaParts = [isTruncated ? `Previewing first ${TEXT_PREVIEW_CHAR_LIMIT.toLocaleString()} chars` : 'Full text preview', formatFileSize(stat.size)];
+  const actions = [`<a href="${rawFileUrl}" class="nav-link" target="_blank" rel="noreferrer">Open raw</a>`];
+  if (isTruncated) actions.unshift(`<a href="${fullViewUrl}" class="nav-link">View full file</a>`);
+  if (isFullView && compactViewUrl) actions.unshift(`<a href="${compactViewUrl}" class="nav-link">Back to compact preview</a>`);
+
+  const metaHtml = `<div class="text-preview-meta">${metaParts.join(' · ')}</div><div class="content-actions">${actions.join('')}</div>`;
+
+  if (ext === '.md') {
+    return `<div class="file-view-content markdown">${metaHtml}${renderMarkdown(previewText)}${isTruncated ? '<div class="preview-fade"></div>' : ''}</div>`;
+  }
+
+  return `<div class="file-view-content">${metaHtml}<pre>${escapeHtml(previewText)}</pre>${isTruncated ? '<div class="preview-fade"></div>' : ''}</div>`;
 }
 
 function createWorkspaceRouter({ baseDir }) {
@@ -140,7 +206,7 @@ function createWorkspaceRouter({ baseDir }) {
 
     const requestedPath = decodeURIComponent(req.params[0] || '');
     const files = getFileList(config.workspace);
-    const fileTree = generateWorkspaceTree(files, agentKey);
+    const fileTree = buildWorkspaceTree(files, agentKey, requestedPath);
     const { fileCount, dirCount } = countTree(files);
     const breadcrumbs = `<span style="color:var(--neon-yellow)">Missing file</span>`;
     const contentHtml = `
@@ -168,6 +234,9 @@ function createWorkspaceRouter({ baseDir }) {
       fileIcon: '⚠️',
       breadcrumbs,
       contentHtml,
+      files,
+      navHtml: '',
+      rawFileUrl: '#',
       statusCode: 404
     });
   }
@@ -206,7 +275,7 @@ function createWorkspaceRouter({ baseDir }) {
     if (!config) return res.status(404).send('Workspace not found');
 
     const files = getFileList(config.workspace);
-    const fileTree = generateWorkspaceTree(files, agentKey);
+    const fileTree = buildWorkspaceTree(files, agentKey);
     const { fileCount, dirCount } = countTree(files);
     const agentTabs = makeAgentTabs(agents, agentKey);
 
@@ -221,8 +290,29 @@ function createWorkspaceRouter({ baseDir }) {
       WORKSPACE_PATH: escapeHtml(config.workspace),
       FILE_COUNT: fileCount,
       DIR_COUNT: dirCount,
-      AGENT_COLOR: config.color
+      AGENT_COLOR: config.color,
+      SEARCH_INDEX_JSON: makeSearchIndexJson(files, agentKey),
+      FILE_NAVIGATION: '',
+      RAW_FILE_URL: '#'
     });
+    res.send(html);
+  });
+
+  router.get('/workspace/tree/*', (req, res) => {
+    const agents = getWorkspaceAgents();
+    const agentKey = getValidWorkspaceAgent(req.query.agent || 'main');
+    const config = agents[agentKey];
+    if (!config) return res.status(404).send('Workspace not found');
+
+    const dirPath = decodeURIComponent(req.params[0] || '');
+    const fullPath = path.join(config.workspace, dirPath);
+    if (!isPathSafe(fullPath, config.workspace) || !fs.existsSync(fullPath) || !fs.statSync(fullPath).isDirectory()) {
+      return res.status(404).send('Directory not found');
+    }
+
+    const children = getDirectoryEntries(config.workspace, dirPath);
+    const html = generateWorkspaceTree(children, agentKey, { initialDepth: 0 }, 1);
+    res.setHeader('Cache-Control', 'no-store');
     res.send(html);
   });
 
@@ -234,13 +324,13 @@ function createWorkspaceRouter({ baseDir }) {
     const fileName = path.basename(filePath);
     const ext = path.extname(fileName).toLowerCase();
 
-    if (!IMAGE_EXTENSIONS.has(ext)) {
-      return res.status(400).send('Raw route currently supports image preview files only');
+    res.setHeader('Cache-Control', 'no-store');
+    if (IMAGE_EXTENSIONS.has(ext)) {
+      res.type(getImageMimeType(fileName));
+      return fs.createReadStream(fullPath).pipe(res);
     }
 
-    res.setHeader('Cache-Control', 'no-store');
-    res.type(getImageMimeType(fileName));
-    fs.createReadStream(fullPath).pipe(res);
+    return res.sendFile(fullPath);
   });
 
   router.get('/workspace/view/*', (req, res) => {
@@ -251,20 +341,20 @@ function createWorkspaceRouter({ baseDir }) {
     const stat = fs.statSync(fullPath);
     const fileName = path.basename(filePath);
     const ext = path.extname(fileName).toLowerCase();
+    const isFullView = req.query.full === '1';
+    const rawFileUrl = `/workspace/raw/${encodeURIComponent(filePath)}?agent=${encodeURIComponent(agentKey)}`;
+    const fullViewUrl = `/workspace/view/${encodeURIComponent(filePath)}?agent=${encodeURIComponent(agentKey)}&full=1`;
+    const compactViewUrl = `/workspace/view/${encodeURIComponent(filePath)}?agent=${encodeURIComponent(agentKey)}`;
 
     let contentHtml;
     try {
       if (IMAGE_EXTENSIONS.has(ext)) {
-        contentHtml = renderImageContent(agentKey, filePath, fileName);
+        contentHtml = renderImageContent(agentKey, filePath, fileName, stat);
       } else if (TEXT_EXTENSIONS.has(ext)) {
         const content = fs.readFileSync(fullPath, 'utf-8');
-        if (ext === '.md') {
-          contentHtml = `<div class="file-view-content markdown">${renderMarkdown(content)}</div>`;
-        } else {
-          contentHtml = `<div class="file-view-content"><pre>${escapeHtml(content)}</pre></div>`;
-        }
+        contentHtml = buildTextContent({ content, ext, stat, isFullView, fullViewUrl, compactViewUrl, rawFileUrl });
       } else {
-        contentHtml = renderBinaryContent(fileName, stat.size);
+        contentHtml = renderBinaryContent(fileName, stat.size, rawFileUrl);
       }
     } catch (e) {
       contentHtml = `<div class="file-view-content"><p style="color:var(--neon-red)">Unable to read file: ${escapeHtml(e.message)}</p></div>`;
@@ -280,8 +370,9 @@ function createWorkspaceRouter({ baseDir }) {
     }).join('<span class="breadcrumb-sep">/</span>');
 
     const files = getFileList(config.workspace);
-    const fileTree = generateWorkspaceTree(files, agentKey);
+    const fileTree = buildWorkspaceTree(files, agentKey, filePath);
     const { fileCount, dirCount } = countTree(files);
+    const navigation = buildFileNavigation(files, agentKey, filePath);
     const page = renderFileViewPage({
       template: workspaceViewTemplate,
       agents,
@@ -297,6 +388,9 @@ function createWorkspaceRouter({ baseDir }) {
       fileIcon: getFileIcon(fileName),
       breadcrumbs,
       contentHtml,
+      files,
+      navHtml: navigation.html,
+      rawFileUrl,
       statusCode: 200
     });
 
