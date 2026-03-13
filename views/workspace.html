@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{TITLE}}</title>
-  <link rel="stylesheet" href="/public/workspace.css?v=20260313-p5d1">
+  <link rel="stylesheet" href="/public/workspace.css?v=20260313-p5d2">
 </head>
 <body class="workspace-shell {{BODY_CLASS}}" data-agent="{{AGENT_KEY}}" data-page="workspace-home">
   <div class="bg-grid"></div>
@@ -49,7 +49,7 @@
         <div class="hero-copy">
           <div class="hero-label">Current Workspace</div>
           <div class="hero-path">{{WORKSPACE_PATH}}</div>
-          <p>左侧搜索 + 树导航会保留状态，不用每次重新展开目录找文件。</p>
+          <p>Search and tree navigation on the left keep their state, so you do not need to reopen folders every time.</p>
         </div>
         <div class="hero-stats">
           <div class="hero-stat-card" style="--accent:{{AGENT_COLOR}}">
@@ -68,21 +68,21 @@
         <div class="tips-grid">
           <div class="tip-card">
             <div class="tip-title">Search first</div>
-            <div class="tip-text">先按文件名过滤，再展开结果，减少树形导航来回翻。</div>
+            <div class="tip-text">Filter by file name first, then expand the results to avoid excessive tree navigation.</div>
           </div>
           <div class="tip-card">
             <div class="tip-title">State is remembered</div>
-            <div class="tip-text">会记住当前 agent、目录展开状态、搜索词和上次浏览文件。</div>
+            <div class="tip-text">The page remembers the current agent, expanded folders, search term, and the last file you opened.</div>
           </div>
           <div class="tip-card">
             <div class="tip-title">Single workspace shell</div>
-            <div class="tip-text">文件页和首页共用同一套侧栏，不再切页后失去上下文。</div>
+            <div class="tip-text">The file view and the home view share the same sidebar, so context is preserved when you switch pages.</div>
           </div>
         </div>
       </section>
     </main>
   </div>
 
-  <script src="/public/workspace.js?v=20260313-p5d1"></script>
+  <script src="/public/workspace.js?v=20260313-p5d2"></script>
 </body>
 </html>
