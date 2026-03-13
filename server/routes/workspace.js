@@ -11,6 +11,9 @@ const {
   generateWorkspaceTree
 } = require('../workspace');
 
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']);
+const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.js', '.ts', '.jsx', '.tsx', '.py', '.sh', '.yml', '.yaml', '.html', '.css', '.sql', '.csv', '.log', '.xml']);
+
 function escapeHtml(value = '') {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -52,6 +55,30 @@ function countTree(items) {
   }
   walk(items);
   return { fileCount, dirCount };
+}
+
+function renderImageContent(fullPath, fileName) {
+  const ext = path.extname(fileName).toLowerCase();
+  const mimeType = ext === '.svg' ? 'image/svg+xml'
+    : ext === '.png' ? 'image/png'
+    : ext === '.gif' ? 'image/gif'
+    : ext === '.webp' ? 'image/webp'
+    : ext === '.bmp' ? 'image/bmp'
+    : ext === '.ico' ? 'image/x-icon'
+    : 'image/jpeg';
+
+  const buffer = fs.readFileSync(fullPath);
+  const base64 = buffer.toString('base64');
+  return `<div class="file-view-content image-preview-wrap"><img class="file-image-preview" src="data:${mimeType};base64,${base64}" alt="${escapeHtml(fileName)}" /></div>`;
+}
+
+function renderBinaryContent(fileName, size) {
+  return `
+    <div class="file-view-content binary-file-notice">
+      <div class="binary-file-title">Binary preview is not available</div>
+      <div class="binary-file-text">${escapeHtml(fileName)} is not a text file, so the viewer will not render it as plain text.</div>
+      <div class="binary-file-meta">Size: ${escapeHtml(formatFileSize(size))}</div>
+    </div>`;
 }
 
 function createWorkspaceRouter({ baseDir }) {
@@ -116,11 +143,17 @@ function createWorkspaceRouter({ baseDir }) {
 
     let contentHtml;
     try {
-      const content = fs.readFileSync(fullPath, 'utf-8');
-      if (ext === '.md') {
-        contentHtml = `<div class="file-view-content markdown">${renderMarkdown(content)}</div>`;
+      if (IMAGE_EXTENSIONS.has(ext)) {
+        contentHtml = renderImageContent(fullPath, fileName);
+      } else if (TEXT_EXTENSIONS.has(ext)) {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        if (ext === '.md') {
+          contentHtml = `<div class="file-view-content markdown">${renderMarkdown(content)}</div>`;
+        } else {
+          contentHtml = `<div class="file-view-content"><pre>${escapeHtml(content)}</pre></div>`;
+        }
       } else {
-        contentHtml = `<div class="file-view-content"><pre>${escapeHtml(content)}</pre></div>`;
+        contentHtml = renderBinaryContent(fileName, stat.size);
       }
     } catch (e) {
       contentHtml = `<div class="file-view-content"><p style="color:var(--neon-red)">Unable to read file: ${escapeHtml(e.message)}</p></div>`;
@@ -148,6 +181,7 @@ function createWorkspaceRouter({ baseDir }) {
       AGENT_NAME: escapeHtml(config.name),
       AGENT_EMOJI: config.emoji,
       AGENT_COLOR: config.color,
+      AGENT_TABS: agentTabs,
       FILE_TREE: fileTree,
       FILE_COUNT: fileCount,
       DIR_COUNT: dirCount,
