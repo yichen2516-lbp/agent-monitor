@@ -11,11 +11,16 @@ window.AgentMonitor.dom = {
       filterKeywordEl: document.getElementById('filter-keyword'),
       filterErrorsOnlyEl: document.getElementById('filter-errors-only'),
       toggleErrorAggregateEl: document.getElementById('toggle-error-aggregate'),
+      quickFailedToolsEl: document.getElementById('quick-failed-tools'),
+      quickToolErrorsEl: document.getElementById('quick-tool-errors'),
+      quickCronErrorsEl: document.getElementById('quick-cron-errors'),
       quickResetFiltersEl: document.getElementById('quick-reset-filters'),
       metricActiveSessionsEl: document.getElementById('metric-active-sessions'),
       metricErrors5mEl: document.getElementById('metric-errors-5m'),
       metricSlowCallsEl: document.getElementById('metric-slow-calls'),
       metricVisibleEl: document.getElementById('metric-visible'),
+      metricCardErrors5mEl: document.getElementById('metric-card-errors-5m'),
+      metricCardSlowCallsEl: document.getElementById('metric-card-slow-calls'),
       drawerOverlayEl: document.getElementById('drawer-overlay')
     };
   },

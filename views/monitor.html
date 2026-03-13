@@ -53,19 +53,19 @@
 
       <section class="hud-panel metrics-panel">
         <div class="summary-cards">
-          <div class="summary-card">
+          <div class="summary-card" id="metric-card-active-sessions">
             <div class="label">Active Sessions</div>
             <div class="value" id="metric-active-sessions">--</div>
           </div>
-          <div class="summary-card">
+          <div class="summary-card summary-card-clickable" id="metric-card-errors-5m" title="Click to filter errors only">
             <div class="label">Errors / 5m</div>
             <div class="value" id="metric-errors-5m">--</div>
           </div>
-          <div class="summary-card">
+          <div class="summary-card summary-card-clickable" id="metric-card-slow-calls" title="Click to filter slow calls">
             <div class="label">Slow Calls (>3s)</div>
             <div class="value" id="metric-slow-calls">--</div>
           </div>
-          <div class="summary-card">
+          <div class="summary-card" id="metric-card-visible">
             <div class="label">Visible Items</div>
             <div class="value" id="metric-visible">--</div>
           </div>
@@ -93,6 +93,9 @@
             Errors Only
           </label>
           <button id="toggle-error-aggregate" class="quick-btn">Error Aggregate: Off</button>
+          <button id="quick-failed-tools" class="quick-btn">Failed Tools</button>
+          <button id="quick-tool-errors" class="quick-btn">Tool Errors</button>
+          <button id="quick-cron-errors" class="quick-btn">Cron Errors</button>
           <button id="quick-reset-filters" class="quick-btn">Reset Filters</button>
         </div>
 

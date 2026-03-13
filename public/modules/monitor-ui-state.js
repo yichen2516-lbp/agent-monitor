@@ -8,7 +8,8 @@ window.AgentMonitor.uiState = {
       filterType: refs.filterTypeEl.value,
       filterKeyword: refs.filterKeywordEl.value,
       filterErrorsOnly: refs.filterErrorsOnlyEl.checked,
-      errorAggregateMode: state.errorAggregateMode
+      errorAggregateMode: state.errorAggregateMode,
+      quickMode: state.quickMode
     };
     try {
       localStorage.setItem(state.STORAGE_KEY, JSON.stringify(snapshot));
@@ -27,6 +28,9 @@ window.AgentMonitor.uiState = {
       if (typeof snapshot.errorAggregateMode === 'boolean') {
         state.errorAggregateMode = snapshot.errorAggregateMode;
         refs.toggleErrorAggregateEl.textContent = 'Error Aggregate: ' + (state.errorAggregateMode ? 'On' : 'Off');
+      }
+      if (typeof snapshot.quickMode === 'string') {
+        state.quickMode = snapshot.quickMode;
       }
     } catch (_) {}
   },

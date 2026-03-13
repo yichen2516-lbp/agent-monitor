@@ -144,6 +144,9 @@
     .activity-item.error-item:hover {
       border-color: var(--neon-red);
     }
+    .activity-item.slow-item {
+      box-shadow: inset 0 0 0 1px rgba(98,199,255,0.16);
+    }
 
     /* Agent 颜色 */
     .activity-item.LBP { border-left-color: var(--neon-yellow); }
@@ -309,6 +312,20 @@
       font-weight: 700;
       clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
     }
+    .aggregate-info-tag,
+    .slow-tag {
+      padding: 2px 6px;
+      font-size: 10px;
+      border: 1px solid rgba(255,255,255,0.14);
+      color: var(--text-muted);
+      clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+    }
+    .slow-tag {
+      color: #9fd9ff;
+      border-color: rgba(98,199,255,0.38);
+      background: rgba(98,199,255,0.12);
+      font-weight: 700;
+    }
 
     .detail-drawer {
       position: fixed;
@@ -368,12 +385,101 @@
     .detail-body pre {
       margin: 0;
       white-space: pre-wrap;
-      word-break: break-all;
+      word-break: break-word;
       background: #0f1726;
       border: 1px solid var(--line);
       padding: 10px;
       font-family: inherit;
       color: #c9dcff;
+    }
+    .detail-section {
+      margin-bottom: 14px;
+    }
+    .detail-section-title {
+      margin-bottom: 8px;
+      color: var(--neon-yellow);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .detail-summary-grid {
+      display: grid;
+      gap: 8px;
+    }
+    .detail-summary-row {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 8px 10px;
+      background: rgba(15,23,38,0.8);
+      border: 1px solid var(--line);
+    }
+    .detail-summary-row.is-error {
+      border-color: rgba(255,55,95,0.38);
+    }
+    .detail-summary-label {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.4px;
+    }
+    .detail-summary-value {
+      color: var(--text-main);
+      word-break: break-word;
+    }
+    .detail-action-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .detail-copy-btn {
+      background: rgba(0,229,255,0.08);
+      border: 1px solid rgba(0,229,255,0.3);
+      color: #8feeff;
+      padding: 6px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    }
+    .detail-source-path {
+      font-size: 11px;
+      color: var(--text-muted);
+      word-break: break-all;
+      padding: 8px 10px;
+      background: rgba(15,23,38,0.55);
+      border: 1px solid var(--line);
+    }
+    .detail-raw-details summary {
+      cursor: pointer;
+      color: var(--neon-cyan);
+      margin-bottom: 8px;
+    }
+    .detail-error-block {
+      border-color: rgba(255,55,95,0.35) !important;
+      background: rgba(40,13,20,0.92) !important;
+      color: #ffb7c5 !important;
+    }
+    .grouped-events-list {
+      display: grid;
+      gap: 8px;
+    }
+    .grouped-event-item {
+      padding: 8px 10px;
+      border: 1px solid rgba(255,55,95,0.25);
+      background: rgba(33,13,21,0.72);
+    }
+    .grouped-event-time {
+      color: #ff9eb0;
+      font-size: 10px;
+      margin-bottom: 4px;
+    }
+    .grouped-event-text {
+      color: var(--text-main);
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     /* 新增：详细信息行 */
@@ -401,6 +507,19 @@
       padding: 10px 12px;
       clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
       position: relative;
+    }
+    .summary-card-clickable {
+      cursor: pointer;
+      transition: border-color .15s ease, transform .12s ease, background .15s ease;
+    }
+    .summary-card-clickable:hover {
+      border-color: rgba(0,229,255,0.45);
+      transform: translateY(-1px);
+    }
+    .summary-card.is-active {
+      border-color: rgba(0,229,255,0.58);
+      background: linear-gradient(180deg, rgba(8,28,38,.92), rgba(7,16,26,.92));
+      box-shadow: inset 0 0 0 1px rgba(0,229,255,0.16);
     }
     .summary-card::before {
       content: '';
@@ -477,6 +596,12 @@
       background: rgba(0,229,255,0.12);
       border-color: rgba(0,229,255,0.45);
       color: var(--neon-cyan);
+    }
+    .quick-btn.is-active {
+      background: rgba(0,229,255,0.16);
+      border-color: rgba(0,229,255,0.55);
+      color: var(--neon-cyan);
+      box-shadow: inset 0 0 0 1px rgba(0,229,255,0.12);
     }
 
     .bg-grid {

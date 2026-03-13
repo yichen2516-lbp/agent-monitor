@@ -10,7 +10,8 @@ window.AgentMonitor.state = {
   currentInterval: 5000,
   fastModeTimer: null,
   intervalId: null,
-  STORAGE_KEY: 'agent-monitor.ui-state.v1',
+  quickMode: 'all',
+  STORAGE_KEY: 'agent-monitor.ui-state.v2',
   POLL_CONFIG: {
     defaultInterval: 5000,
     fastInterval: 1000,

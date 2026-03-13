@@ -48,21 +48,62 @@
       uiState.save(refs);
     });
 
+    const setQuickMode = (mode) => {
+      state.quickMode = state.quickMode === mode ? 'all' : mode;
+      render.renderFilteredList(refs);
+      uiState.save(refs);
+    };
+
     refs.quickResetFiltersEl.addEventListener('click', () => {
       refs.filterAgentEl.value = 'all';
       refs.filterTypeEl.value = 'all';
       refs.filterKeywordEl.value = '';
       refs.filterErrorsOnlyEl.checked = false;
       state.errorAggregateMode = false;
+      state.quickMode = 'all';
       refs.toggleErrorAggregateEl.textContent = 'Error Aggregate: Off';
       render.renderFilteredList(refs);
       uiState.save(refs);
     });
 
-    document.addEventListener('click', (e) => {
+    refs.metricCardErrors5mEl?.addEventListener('click', () => {
+      refs.filterErrorsOnlyEl.checked = true;
+      state.quickMode = 'all';
+      render.renderFilteredList(refs);
+      uiState.save(refs);
+    });
+
+    refs.metricCardSlowCallsEl?.addEventListener('click', () => setQuickMode('slow'));
+    refs.quickFailedToolsEl?.addEventListener('click', () => setQuickMode('failed-tools'));
+    refs.quickToolErrorsEl?.addEventListener('click', () => setQuickMode('tool-errors'));
+    refs.quickCronErrorsEl?.addEventListener('click', () => setQuickMode('cron-errors'));
+
+    document.addEventListener('click', async (e) => {
       if (e.target && e.target.id === 'detail-close') {
         dom.getDetailDrawerEl()?.classList.remove('open');
         refs.drawerOverlayEl?.classList.remove('open');
+        return;
+      }
+
+      const copyTarget = e.target?.dataset?.copyTarget;
+      if (copyTarget) {
+        const detailBodyEl = dom.getDetailBodyEl();
+        const copyMap = {
+          json: detailBodyEl?.dataset?.copyJson || '',
+          source: detailBodyEl?.dataset?.copySource || '',
+          session: detailBodyEl?.dataset?.copySession || ''
+        };
+        const text = copyMap[copyTarget] || '';
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          e.target.textContent = 'Copied';
+          setTimeout(() => {
+            e.target.textContent = copyTarget === 'json' ? 'Copy Event JSON' : copyTarget === 'source' ? 'Copy Source Path' : 'Copy Session';
+          }, 1200);
+        } catch (err) {
+          console.warn('[Agent-Monitor] copy failed:', err.message);
+        }
       }
     });
 
