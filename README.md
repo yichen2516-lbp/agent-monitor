@@ -1,123 +1,247 @@
-<div align="center">
+# Agent Monitor
 
-# 🤖 Agent Monitor
+Agent Monitor is a realtime monitoring dashboard for **OpenClaw agents**.
 
-**Real-time monitoring dashboard for OpenClaw Agent activities**
+It is built for a very specific job: not just to show logs, but to help you answer the questions that actually matter during daily use:
 
-[![Status](https://img.shields.io/badge/status-active-success?style=flat-square)](https://github.com/yichen2516-lbp/agent-monitor)
-[![Version](https://img.shields.io/badge/version-1.5.3-blue?style=flat-square)](https://github.com/yichen2516-lbp/agent-monitor/releases)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?style=flat-square&logo=node.js)](https://nodejs.org/)
+- **Which agent is active right now?**
+- **What just happened?**
+- **What is it doing now?**
+- **If it is not replying, is it thinking, calling a tool, failing, or just idle?**
 
-[Live Demo](https://github.com/yichen2516-lbp/agent-monitor#) · [Report Bug](https://github.com/yichen2516-lbp/agent-monitor/issues) · [Request Feature](https://github.com/yichen2516-lbp/agent-monitor/issues)
-
-</div>
+In short, Agent Monitor is meant to be a practical control surface for OpenClaw sessions, cron runs, and workspace inspection — not another page that only scrolls text.
 
 ---
 
-## 📋 Table of Contents
+## Why this project exists
 
-- [About](#about)
-- [Features](#features)
-- [Screenshots](#screenshots)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Configuration](#configuration)
-- [Usage](#usage)
-- [API Reference](#api-reference)
-- [Architecture](#architecture)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+OpenClaw already produces rich session data, but raw session logs alone are not enough for smooth day-to-day debugging.
 
----
+Two gaps show up quickly in real usage:
 
-## 🎯 About
+1. **Events exist, but state is not obvious enough**  
+   You can see tools, replies, thinking, and cron records — but it is still hard to answer "what is happening right now?"
 
-Agent Monitor is a lightweight, real-time dashboard for tracking OpenClaw Agent activities. It provides instant visibility into agent sessions, cron jobs, and system resources—all in a clean, dark-themed interface optimized for monitoring workflows.
+2. **Logs exist, but the investigation path is still too long**  
+   When something goes wrong, the real goal is not "does a log exist?" but:
+   - which agent is affected,
+   - which session is affected,
+   - whether it is slow, broken, or stuck,
+   - and which event you should inspect first.
 
-**Why Agent Monitor?**
-
-- 🔍 **Instant Visibility** — See what your agents are doing in real-time
-- 📊 **System Context** — Monitor CPU/GPU/Memory alongside agent activities
-- 🚀 **Zero Configuration** — Works out of the box with OpenClaw defaults
-- 📱 **Mobile Ready** — Check agent status from anywhere
+Agent Monitor exists to shorten that path.
 
 ---
 
-## ✨ Features
+## Capability Overview
 
-### Core Capabilities
+### Monitoring
+- Realtime activity feed for `tool / thinking / reply / cron`
+- Hybrid transport: `HTTP bootstrap + WebSocket incremental push + polling fallback`
+- Multi-agent auto discovery
+- Session-aware event parsing
+- Cron visibility
+- System metrics: CPU / GPU / Memory / Disk
 
-| Feature | Description |
-|---------|-------------|
-| 🔴 **Real-time Monitoring** | Track all agent session activities with adaptive 1s/5s polling |
-| 📝 **Activity Logging** | View tool calls, thinking processes, and responses |
-| 🎭 **Multi-Agent Support** | Automatically detect and distinguish between agents |
-| ⏰ **Cron Monitoring** | Display scheduled task execution records |
-| 📊 **System Metrics** | Real-time CPU / GPU / Memory / Disk monitoring |
-| 🌙 **Dark Theme** | Eye-friendly design for extended monitoring sessions |
-| 🔍 **Rich Metadata** | Model info, token usage, execution time, exit codes |
-| 🧭 **Filter & Error-First Workflow** | Filter by agent/type/keyword, focus on errors, aggregate repeated failures |
-| 📌 **Persistent UI State** | Preserve filters and error-view options across page refresh |
-| 🗂️ **Detail Drawer** | Click any activity to inspect structured event details |
+### Investigation workflow
+- Error-first filtering
+- Slow call quick filtering
+- Failed tools / tool errors / cron errors quick filters
+- Error aggregation for repeated failures
+- Structured detail drawer + raw event JSON
+- Model / token / duration / exit code visibility
 
-### Advanced Features
+### Live status
+- Agent live status (v1 heuristic)
+- Transport indicator: `WS LIVE / POLLING / CONNECTING`
+- Terminal states auto-expire into `idle`
+- Stale agents auto-hide after long inactivity
 
-- **Smart Polling** — Adaptive refresh rate (1s active / 5s idle) to reduce resource usage
-- **Session Isolation** — Separate storage for session and cron records
-- **Cross-Platform** — Works on macOS, Linux, and Windows
-- **Responsive Design** — Optimized for both desktop and mobile devices
-- **Auto-Discovery** — Automatically detects agent workspaces without manual configuration
+### Workspace browser
+- On-demand tree expansion
+- Lightweight indexed search
+- Markdown / image / binary-safe preview
+- Compact preview for large text files
+- Recent files / prev-next navigation / raw open
+- Mobile file picker and drawer interaction
 
 ---
 
-## 📸 Screenshots
+## Current Feature Set
 
-<div align="center">
+### 1. Monitor dashboard
+The main dashboard is optimized for **continuous observation and first-response debugging**.
 
-*Dashboard showing real-time agent activities with system metrics*
+It currently supports:
+- Activity stream for:
+  - `tool`
+  - `thinking`
+  - `reply`
+  - `cron`
+- Rich event metadata:
+  - model
+  - provider
+  - usage
+  - duration
+  - exit code
+  - tool status
+  - stop reason
+- Investigation helpers:
+  - Agent / Type / Keyword filters
+  - Errors only
+  - Error aggregation
+  - Failed Tools / Tool Errors / Cron Errors / Slow Calls quick filters
+- Detail drawer:
+  - summary fields
+  - description
+  - grouped events
+  - copy JSON / source / session
+  - raw payload
 
+### 2. Realtime transport
+The current transport design is **hybrid**, not push-only.
+
+- Initial page load uses `GET /api`
+- Incremental updates use `GET /ws`
+- If WebSocket disconnects, the UI falls back to polling automatically
+- The header explicitly shows the current transport mode
+
+This is intentional. It keeps the UI realtime while preserving safe recovery after reconnects.
+
+### 3. Agent live status (v1)
+Agent Monitor now tracks a first-pass answer to: **what is the agent doing now?**
+
+Current states include:
+- `thinking`
+- `tool-running`
+- `tool-done`
+- `tool-failed`
+- `reply-done`
+- `idle`
+- `cron-error`
+
+Each live status card shows:
+- current session
+- current status code
+- human-readable status label
+- last updated time
+
+This already reduces a lot of the ambiguity behind "why is it not replying?"
+
+### 4. Workspace browser
+The workspace browser is no longer just a raw file viewer. It is designed for ongoing inspection and lightweight debugging.
+
+Current behavior:
+- auto-discovers `~/.openclaw/workspace*`
+- lazy-loads deep folders to reduce initial DOM weight
+- uses a lightweight search index instead of full DOM traversal
+- remembers:
+  - active agent
+  - expanded directories
+  - search term
+  - recent files
+- supports:
+  - markdown rendering
+  - image preview
+  - binary-safe notice
+  - compact preview for large text files
+  - raw file open
+  - prev / next navigation
+  - mobile file picker drawer
+
+---
+
+## Architecture
+
+### High-level data flow
+
+```text
+OpenClaw session jsonl / cron jsonl
+            │
+            ▼
+         parsers
+            │
+            ▼
+      monitor-store
+            │
+     ┌──────┴────────┐
+     │               │
+     ▼               ▼
+   /api            /ws
+     │               │
+     └──────┬────────┘
+            ▼
+      frontend state
+            ▼
+ render / filter / drawer / live status UI
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  CPU: 15%  GPU: 0%  MEM: 97%  DISK: 6%                     │
-├─────────────────────────────────────────────────────────────┤
-│  [01:33:06]  main  abc123def                                │
-│  ├─ 🤔 Thinking: Planning response structure...            │
-│  ├─ 🔧 Tool: web_search "Agent Monitor GitHub"             │
-│  └─ [k2p5] [⚡ 13,202 tokens] [⏱️ 17ms] [Exit: 0]          │
-├─────────────────────────────────────────────────────────────┤
-│  [01:32:45]  cool  xyz789ghi                                │
-│  ├─ 🔧 Tool: exec "curl -s localhost:3457"                 │
-│  └─ [M2.5] [⚡ 2,341 tokens] [⏱️ 245ms] [Exit: 0]          │
-└─────────────────────────────────────────────────────────────┘
-```
 
-</div>
+### Key design choices
+
+#### Store-centered coordination
+`monitor-store.js` acts as the coordinator for:
+- loading session / cron sources
+- watching incremental file changes
+- maintaining recent activities
+- deriving live statuses
+- notifying realtime subscribers
+
+This keeps parsing, storage, watching, and UI transport clearly separated.
+
+#### Hybrid realtime over pure push
+The project does **not** force everything through WebSocket.
+
+Instead it uses:
+- HTTP bootstrap for initial consistency
+- WebSocket for incremental updates
+- polling fallback for resilience
+
+That makes the UI more robust during reconnects and local runtime instability.
+
+#### Heuristic live status over fake precision
+The current live status layer is intentionally honest.
+
+It can infer many useful states from observable session events, but it does **not** pretend to have provider-internal certainty when no such lifecycle event exists.
 
 ---
 
-## 🚀 Getting Started
+## Repository Structure
 
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) >= 18.0.0
-- [OpenClaw](https://github.com/openclaw/openclaw) installed and configured
-- (Optional) Git for cloning
-
-### Installation
-
-#### Option 1: Clone via HTTPS
-
-```bash
-git clone https://github.com/yichen2516-lbp/agent-monitor.git
-cd agent-monitor
-npm install
+```text
+index.js                        # app entry + HTTP + WS upgrade
+server/config.js                # config loading
+server/logger.js                # rolling log handling
+server/ws-hub.js                # lightweight websocket broadcaster
+server/routes/api.js            # /api /health
+server/routes/workspace.js      # workspace routes and file rendering
+server/monitor-store.js         # coordinator + live status logic
+server/parsers/                 # session / cron parsing
+server/store/                   # in-memory activity store
+server/watchers/                # fs watch wrappers
+public/modules/monitor-state.js
+public/modules/monitor-dom.js
+public/modules/monitor-render.js
+public/modules/monitor-poller.js
+public/modules/monitor-filters.js
+public/modules/monitor-system-panel.js
+views/monitor.html
+views/workspace.html
+views/workspace-view.html
+test/                           # parser/store regression tests
 ```
 
-#### Option 2: Clone via SSH
+---
+
+## Getting Started
+
+### Requirements
+- Node.js >= 18
+- OpenClaw installed locally
+- Access to:
+  - `~/.openclaw/agents`
+  - `~/.openclaw/cron/runs`
+
+### Install
 
 ```bash
 git clone git@github.com:yichen2516-lbp/agent-monitor.git
@@ -125,316 +249,172 @@ cd agent-monitor
 npm install
 ```
 
-#### Option 3: Download ZIP
+### Run
 
 ```bash
-curl -L https://github.com/yichen2516-lbp/agent-monitor/archive/refs/heads/main.zip -o agent-monitor.zip
-unzip agent-monitor.zip
-cd agent-monitor-main
-npm install
-```
-
-### Quick Start
-
-```bash
-# Start with default configuration
-npm start
-
-# Or with custom settings
-export AGENTS_DIR=/path/to/.openclaw/agents
-export PORT=3450
 npm start
 ```
 
-The dashboard will be available at `http://localhost:3450`.
+Default endpoints:
+- Monitor: <http://localhost:3450>
+- Workspace: <http://localhost:3450/workspace>
+- API: <http://localhost:3450/api>
+- Health: <http://localhost:3450/health>
+- WebSocket: `ws://localhost:3450/ws`
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
-### Environment Variables
+Configuration can be provided via environment variables or `config.json`.
+
+### Environment variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `AGENTS_DIR` | `~/.openclaw/agents` | Path to OpenClaw agents directory |
+|---|---|---|
 | `PORT` | `3450` | Server port |
-| `MAX_ACTIVITIES` | `300` | Maximum number of activities to retain |
-| `POLL_INTERVAL` | `10000` | File polling interval (ms) |
-| `REFRESH_INTERVAL` | `1000` | UI refresh interval (ms) |
-| `LOG_RETENTION_DAYS` | `3` | Rolling log retention (days) for `./logs/agent-monitor-YYYY-MM-DD.log` |
+| `AGENTS_DIR` | `~/.openclaw/agents` | OpenClaw agents directory |
+| `MAX_ACTIVITIES` | `300` | Max activities kept in memory |
+| `POLL_INTERVAL` | `10000` | Backend polling interval for discovering new sessions / cron files |
+| `LOG_RETENTION_DAYS` | `3` | Rolling log retention days |
 
-### Configuration File
-
-Create a `config.json` in the project root:
+### Example `config.json`
 
 ```json
 {
-  "agentsDir": "/home/user/.openclaw/agents",
+  "agentsDir": "/Users/you/.openclaw/agents",
   "maxActivities": 300,
   "pollInterval": 10000,
-  "refreshInterval": 1000
+  "activityMaxAgeHours": 24,
+  "logRetentionDays": 3
 }
 ```
 
-### Platform-Specific Setup
-
-<details>
-<summary><b>macOS</b></summary>
-
-```bash
-export AGENTS_DIR=/Users/$(whoami)/.openclaw/agents
-npm start
-```
-</details>
-
-<details>
-<summary><b>Linux</b></summary>
-
-```bash
-export AGENTS_DIR=/home/$(whoami)/.openclaw/agents
-npm start
-```
-</details>
-
-<details>
-<summary><b>Windows (PowerShell)</b></summary>
-
-```powershell
-$env:AGENTS_DIR="$env:USERPROFILE\.openclaw\agents"
-npm start
-```
-</details>
-
 ---
 
-## 📖 Usage
+## API
 
-### Dashboard Overview
+### `GET /api`
+Returns the current monitor snapshot.
 
-The main dashboard displays:
-
-1. **System Bar** — Real-time resource usage (CPU, GPU, Memory, Disk)
-2. **Summary Cards** — Active sessions, 5-minute error count, slow calls, visible items
-3. **Filter Bar** — Agent/type/keyword filters, error-only mode, error aggregation toggle
-4. **Activity Feed** — Chronological list of agent activities
-5. **Metadata Tags** — Model, tokens, execution time, exit code
-6. **Detail Drawer** — Click an item to inspect structured event fields
-
-### Activity Indicators
-
-| Element | Meaning |
-|---------|---------|
-| `🤔 Thinking` | Agent is processing/thinking |
-| `🔧 Tool` | Tool invocation (read, exec, web_search, etc.) |
-| `💬 Reply` | Agent response |
-| `⏰ [cron]` | Scheduled task execution |
-| `[k2p5]` / `[M2.5]` | Model identifier |
-| `⚡ N tokens` | Token consumption |
-| `⏱️ Nms` | Execution duration |
-| `Exit: 0` / `Exit: 1` | Success / Failure |
-
-### Workspace Browser
-
-Navigate to `http://localhost:3450/workspace` to browse agent workspace files:
-
-- **Auto-discovery** — Automatically detects all `workspace*` directories in `~/.openclaw/`
-- **Multi-agent support** — Dynamically adapts to any agent workspaces found (main, cool, tim, edge, etc.)
-- **Markdown rendering** — Syntax highlighting and formatting for `.md` files
-- **Mobile-optimized interface** — Responsive design for on-the-go monitoring
-
-**Auto-recognition mapping:**
-| Directory | Display Name | Emoji | Color |
-|-----------|--------------|-------|-------|
-| `workspace` | Main | ⚡ | Orange |
-| `workspace-cool` | Cool | ❄️ | Blue |
-| `workspace-tim` | Tim | ⏱️ | Green |
-| `workspace-edge` | Edge | 🔥 | Pink |
-| `workspace-*` | *Auto* | 🤖 | Gray |
-
----
-
-## 🔌 API Reference
-
-### Get Dashboard Data
-
-```http
-GET /api
-```
-
-**Query Parameters**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `since` | ISO datetime (optional) | Return activities newer than this timestamp (incremental polling support) |
-
-**Response:**
+Example:
 
 ```json
 {
-  "agents": ["main", "edge", "cool", "tim"],
-  "activities": [
-    {
+  "agents": ["main", "cool"],
+  "activities": [],
+  "agentStatuses": {
+    "main": {
       "agent": "main",
-      "session": "abc123def",
-      "type": "tool",
-      "tool": "web_search",
-      "model": "k2p5",
-      "tokens": 13202,
-      "duration": 17,
-      "exitCode": 0,
-      "timestamp": "2026-03-09T01:33:06.000Z"
+      "sessionName": "abcd1234",
+      "code": "thinking",
+      "label": "Thinking",
+      "updatedAt": "2026-03-13T09:39:00.000Z"
     }
-  ],
-  "system": {
-    "cpu": { "used": 15, "user": 3.5, "sys": 11.5 },
-    "gpu": { "used": 0, "name": "Apple Silicon" },
-    "memory": { "used": 7.8, "total": 8, "percentage": 97 },
-    "disk": { "used": 10, "total": 233, "percentage": 6 }
   },
-  "updatedAt": "2026-03-09T01:33:06.000Z"
+  "system": {},
+  "updatedAt": "2026-03-13T09:39:05.000Z"
 }
 ```
 
-### Health Check
+Query parameters:
+- `since=<ISO timestamp>` — incremental activity fetch
 
-```http
-GET /health
+### `GET /health`
+
+```json
+{ "status": "ok", "agents": 2 }
 ```
 
-**Response:**
+### `GET /ws`
+WebSocket endpoint for incremental event push.
+
+Current event types:
+- `connected`
+- `activities`
+
+`activities` payload:
 
 ```json
 {
-  "status": "ok",
-  "agents": 3
+  "event": "activities",
+  "payload": {
+    "activities": [],
+    "agentStatuses": {}
+  }
 }
 ```
 
+### Workspace routes
+- `GET /workspace`
+- `GET /workspace/view/*`
+- `GET /workspace/raw/*`
+- `GET /workspace/tree/*`
+
 ---
 
-## 🏗️ Architecture
+## Quality and Regression
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Agent Monitor                          │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Frontend   │  │    Backend   │  │   Monitors   │      │
-│  │  (Vanilla JS)│  │   (Express)  │  │  (FS Watch)  │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-│         │                 │                 │              │
-│         └─────────────────┴─────────────────┘              │
-│                           │                                │
-│                    ┌──────┴──────┐                        │
-│                    │  OpenClaw   │                        │
-│                    │   Agents    │                        │
-│                    └─────────────┘                        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Data Sources
-
-| Source | Path | Content |
-|--------|------|---------|
-| Sessions | `~/.openclaw/agents/{agent}/sessions/*.jsonl` | Agent conversation history |
-| Cron | `~/.openclaw/cron/runs/*.jsonl` | Scheduled task executions |
-| System | OS APIs | CPU, GPU, Memory, Disk metrics |
-
-### Current Code Structure
-
-```text
-index.js                        # app entry
-server/config.js                # config loading
-server/logger.js                # rolling logs
-server/routes/api.js            # /api /health
-server/routes/workspace.js      # workspace pages
-server/monitor-store.js         # coordinator
-server/parsers/                 # session / cron parsing
-server/store/                   # in-memory activity store
-server/watchers/                # file watchers
-public/modules/                 # frontend state/render/polling modules
-views/                          # monitor/workspace templates
-test/                           # minimal regression tests + fixtures
-```
-
-### Run Regression Tests
+Run the current automated regression suite:
 
 ```bash
 npm test
 ```
 
-当前最小回归覆盖：
-- session activity parser（新格式 / 旧格式）
-- cron parser
-- activity store limit / since 过滤
+Current automated coverage:
+- new / legacy activity parser
+- tool call / tool result pairing
+- cron parsing
+- activity retention + `since` filtering
+
+Manual regression reference:
+- [`REGRESSION_CHECKLIST.md`](./REGRESSION_CHECKLIST.md)
 
 ---
 
-## 🗺️ Roadmap
+## Current Limitations
 
-- [ ] WebSocket support for true real-time updates
-- [ ] Historical data persistence and analytics
-- [ ] Alert notifications (webhook/email)
-- [ ] Multi-node monitoring support
-- [ ] REST API authentication
-- [ ] Plugin system for custom metrics
+### 1. Live status is useful, but not provider-internal truth
+The current live status system is intentionally **heuristic**.
 
-See [open issues](https://github.com/yichen2516-lbp/agent-monitor/issues) for proposed features and known issues.
+It can explain many observable states well, but it cannot yet guarantee provider-internal distinctions such as:
+- truly waiting on a remote model response
+- provider-side stall without explicit event emission
+- network-layer failure before OpenClaw emits a clear error event
 
----
+This is a visibility limitation, not just a UI limitation.
 
-## 🤝 Contributing
+### 2. WebSocket is hybrid, not fully push-only
+Current realtime behavior is:
+- HTTP bootstrap
+- WS incremental push
+- polling fallback
 
-Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+This is by design. It trades conceptual purity for resilience and simpler recovery.
 
-### Development Setup
+### 3. Agent live status is still v1
+The current implementation already supports:
+- auto-expiring terminal states into `idle`
+- auto-hiding stale agents
 
-```bash
-# Fork and clone
-git clone https://github.com/YOUR_USERNAME/agent-monitor.git
-cd agent-monitor
-
-# Install dependencies
-npm install
-
-# Run in development mode
-npm run dev
-```
-
-### Pull Request Process
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-Please ensure your PR:
-- Follows the existing code style
-- Includes appropriate test coverage
-- Updates documentation if needed
-- Passes core regression checks in [`REGRESSION_CHECKLIST.md`](./REGRESSION_CHECKLIST.md)
+But it still has room to improve in:
+- provider-aware states
+- richer per-session drill-down
+- explicit "possibly waiting model/provider" heuristics
 
 ---
 
-## 📄 License
+## Roadmap Direction
 
-Distributed under the MIT License. See [`LICENSE`](LICENSE) for more information.
-
----
-
-## 🙏 Acknowledgments
-
-- Built for [OpenClaw](https://github.com/openclaw/openclaw) — the extensible AI agent platform
-- Inspired by the need for better visibility into multi-agent workflows
-- Thanks to all contributors and users who provided feedback
+Current next-step themes:
+1. provider-aware live status research
+2. richer usage display (`input / output / total`)
+3. session drill-down views
+4. continued reduction of unnecessary polling paths
+5. stronger explanation of "why no reply yet?"
 
 ---
 
-<div align="center">
+## License
 
-**[⬆ Back to Top](#agent-monitor)**
-
-Built with 🤖⚡ by LBP · Human supervision & snack supply: Yichen
-
-</div>
+MIT
