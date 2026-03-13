@@ -48,14 +48,18 @@ Agent Monitor exists to shorten that path.
 - Slow call quick filtering
 - Failed tools / tool errors / cron errors quick filters
 - Error aggregation for repeated failures
+- Session focus flow from live status card into feed filtering
+- Same-session recent timeline inside the drawer
+- Investigation verdict layer for faster first-pass diagnosis
 - Structured detail drawer + raw event JSON
 - Model / token / duration / exit code visibility
 
 ### Live status
-- Agent live status (v1 heuristic)
+- Session-first agent live status (v2 heuristic)
 - Transport indicator: `WS LIVE / POLLING / CONNECTING`
 - Terminal states auto-expire into `idle`
 - Stale agents auto-hide after long inactivity
+- Focusable status cards with current session / duration / tool / model context
 
 ### Workspace browser
 - On-demand tree expansion
@@ -92,9 +96,14 @@ It currently supports:
   - Error aggregation
   - Failed Tools / Tool Errors / Cron Errors / Slow Calls quick filters
 - Detail drawer:
-  - summary fields
+  - investigation verdict
+  - structured investigation sections:
+    - overview
+    - model & usage
+    - execution & source
   - description
   - grouped events
+  - same-session recent timeline
   - copy JSON / source / session
   - raw payload
 
@@ -108,25 +117,29 @@ The current transport design is **hybrid**, not push-only.
 
 This is intentional. It keeps the UI realtime while preserving safe recovery after reconnects.
 
-### 3. Agent live status (v1)
-Agent Monitor now tracks a first-pass answer to: **what is the agent doing now?**
+### 3. Agent live status (v2)
+Agent Monitor now tracks a stronger first-pass answer to: **what is the agent doing now?**
 
 Current states include:
 - `thinking`
+- `waiting-model`
+- `tool-call-pending`
 - `tool-running`
-- `tool-done`
 - `tool-failed`
 - `reply-done`
 - `idle`
 - `cron-error`
 
-Each live status card shows:
+Each live status card now shows:
 - current session
 - current status code
 - human-readable status label
+- status duration
+- current tool (when available)
+- model (when available)
 - last updated time
 
-This already reduces a lot of the ambiguity behind "why is it not replying?"
+This significantly reduces the ambiguity behind "why is it not replying?"
 
 ### 4. Workspace browser
 The workspace browser is no longer just a raw file viewer. It is designed for ongoing inspection and lightweight debugging.
@@ -307,11 +320,14 @@ Example:
     "main": {
       "agent": "main",
       "sessionName": "abcd1234",
-      "code": "thinking",
-      "label": "Thinking",
+      "code": "waiting-model",
+      "label": "Waiting for model",
+      "tool": null,
+      "durationMs": 4200,
       "updatedAt": "2026-03-13T09:39:00.000Z"
     }
   },
+  "sessionStatuses": [],
   "system": {},
   "updatedAt": "2026-03-13T09:39:05.000Z"
 }
@@ -340,7 +356,8 @@ Current event types:
   "event": "activities",
   "payload": {
     "activities": [],
-    "agentStatuses": {}
+    "agentStatuses": {},
+    "sessionStatuses": []
   }
 }
 ```
@@ -363,9 +380,11 @@ npm test
 
 Current automated coverage:
 - new / legacy activity parser
+- assistant-side provider error parsing
 - tool call / tool result pairing
 - cron parsing
 - activity retention + `since` filtering
+- session-first live status derivation
 
 Manual regression reference:
 - [`REGRESSION_CHECKLIST.md`](./REGRESSION_CHECKLIST.md)
@@ -392,26 +411,29 @@ Current realtime behavior is:
 
 This is by design. It trades conceptual purity for resilience and simpler recovery.
 
-### 3. Agent live status is still v1
+### 3. Agent live status is still heuristic, not provider-internal truth
 The current implementation already supports:
+- session-first status derivation
+- explicit `waiting-model` / `tool-call-pending` / `tool-running` transitions
 - auto-expiring terminal states into `idle`
 - auto-hiding stale agents
+- assistant-side provider error surfacing in the feed
 
 But it still has room to improve in:
 - provider-aware states
-- richer per-session drill-down
-- explicit "possibly waiting model/provider" heuristics
+- richer session header / drill-down surfaces
+- stronger distinction between local waiting and remote provider wait when no explicit lifecycle events exist
 
 ---
 
 ## Roadmap Direction
 
 Current next-step themes:
-1. provider-aware live status research
-2. richer usage display (`input / output / total`)
-3. session drill-down views
+1. session mini header refinement for focused debugging
+2. provider-aware live status research
+3. stronger cross-session prioritization when many agents are active
 4. continued reduction of unnecessary polling paths
-5. stronger explanation of "why no reply yet?"
+5. deeper explanation of "why no reply yet?" when platform lifecycle signals allow it
 
 ---
 

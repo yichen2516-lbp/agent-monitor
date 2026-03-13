@@ -27,6 +27,30 @@ test('activity parser parses new message format with tool pairing', () => {
   assert.equal(all[0].model, 'gpt-5.4');
 });
 
+test('activity parser assigns usage to the reply cell instead of duplicating it across split assistant items', () => {
+  const parser = createActivityParser({ toolCallState: createToolCallState() });
+  const line = JSON.stringify({
+    type: 'message',
+    timestamp: '2026-03-13T05:00:00.000Z',
+    message: {
+      role: 'assistant',
+      model: 'gpt-5.4',
+      usage: { input: 10, output: 20, totalTokens: 30 },
+      content: [
+        { type: 'thinking', thinking: 'Planning' },
+        { type: 'text', text: 'Hello' },
+        { type: 'toolCall', id: 'tool-1', name: 'exec', arguments: { command: 'echo hi' } }
+      ]
+    }
+  });
+
+  const all = parser.parseLine(line, 'main', 'session-usage') || [];
+  assert.equal(all.length, 3);
+  assert.equal(all[0].usage, null);
+  assert.deepEqual(all[1].usage, { input: 10, output: 20, totalTokens: 30 });
+  assert.equal(all[2].usage, null);
+});
+
 test('activity parser parses legacy format', () => {
   const parser = createActivityParser({ toolCallState: createToolCallState() });
   const lines = readFixture('session-old-format.jsonl');

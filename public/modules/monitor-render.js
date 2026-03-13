@@ -368,11 +368,11 @@ window.AgentMonitor.render = {
       detailsRow.appendChild(modelTag);
     }
 
-    const normalizedUsage = formatters.normalizeUsage(activity.usage);
-    if (normalizedUsage?.total) {
+    const usageBadgeText = formatters.formatUsageBadge(activity.usage);
+    if (usageBadgeText) {
       const tokenTag = document.createElement('span');
       tokenTag.className = 'token-tag';
-      tokenTag.textContent = '⚡ ' + formatters.formatTokens(normalizedUsage.total) + ' tokens';
+      tokenTag.textContent = '⚡ ' + usageBadgeText;
       detailsRow.appendChild(tokenTag);
     }
 

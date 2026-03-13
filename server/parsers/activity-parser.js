@@ -3,6 +3,17 @@ function createActivityParser({ toolCallState }) {
     return { toolName, args, timestamp, model, provider, usage, stopReason };
   }
 
+  function pickAssistantItemUsage({ usage, contentItems, index, itemType }) {
+    if (!usage) return null;
+    const length = Array.isArray(contentItems) ? contentItems.length : 0;
+    if (length <= 1) return usage;
+
+    const hasTextItem = Array.isArray(contentItems) && contentItems.some(item => item?.type === 'text' && item?.text);
+    if (itemType === 'text' && hasTextItem) return usage;
+
+    return null;
+  }
+
   function parseNewMessageFormat(data, agentName, sessionName, sessionKey) {
     const msg = data.message;
     const timestamp = data.timestamp || new Date().toISOString();
@@ -53,21 +64,23 @@ function createActivityParser({ toolCallState }) {
       }
 
       if (Array.isArray(msg.content)) {
-        for (const item of msg.content) {
+        msg.content.forEach((item, index) => {
+          const itemUsage = pickAssistantItemUsage({ usage, contentItems: msg.content, index, itemType: item.type });
+
           if (item.type === 'thinking' && item.thinking) {
-            activities.push({ type: 'thinking', agent: agentName, sessionName, description: `💭 ${item.thinking}`, timestamp, model, provider, usage, stopReason });
+            activities.push({ type: 'thinking', agent: agentName, sessionName, description: `💭 ${item.thinking}`, timestamp, model, provider, usage: itemUsage, stopReason });
           }
           if (item.type === 'text' && item.text) {
-            activities.push({ type: 'reply', agent: agentName, sessionName, description: `💬 ${item.text}`, timestamp, fullText: item.text, model, provider, usage, stopReason });
+            activities.push({ type: 'reply', agent: agentName, sessionName, description: `💬 ${item.text}`, timestamp, fullText: item.text, model, provider, usage: itemUsage, stopReason });
           }
           if (item.type === 'toolCall') {
             const toolName = item.name || 'unknown';
             const args = item.arguments ? JSON.stringify(item.arguments) : '';
             const toolCallId = item.id || item.toolCallId;
-            toolCallState.setPending(toolCallId, buildToolCallPayload({ toolName, args, timestamp, model, provider, usage, stopReason }));
-            activities.push({ type: 'tool', agent: agentName, sessionName, tool: toolName, description: `🔧 ${toolName} ${args}`, timestamp, model, provider, usage, stopReason });
+            toolCallState.setPending(toolCallId, buildToolCallPayload({ toolName, args, timestamp, model, provider, usage: itemUsage, stopReason }));
+            activities.push({ type: 'tool', agent: agentName, sessionName, tool: toolName, description: `🔧 ${toolName} ${args}`, timestamp, model, provider, usage: itemUsage, stopReason });
           }
-        }
+        });
       }
       return activities.length > 0 ? activities : null;
     }

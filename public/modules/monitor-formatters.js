@@ -34,6 +34,16 @@ window.AgentMonitor.formatters = {
     return numeric.toLocaleString();
   },
 
+  formatUsageBadge(usage) {
+    const normalized = this.normalizeUsage(usage);
+    if (!normalized) return null;
+    const parts = [];
+    if (normalized.input > 0) parts.push(`IN ${this.formatTokens(normalized.input)}`);
+    if (normalized.output > 0) parts.push(`OUT ${this.formatTokens(normalized.output)}`);
+    if (parts.length === 0 && normalized.total > 0) parts.push(`TOTAL ${this.formatTokens(normalized.total)}`);
+    return parts.length > 0 ? parts.join(' · ') : null;
+  },
+
   getActivityKey(activity) {
     return [
       activity.timestamp,

@@ -182,7 +182,7 @@ Substantially moved forward through:
 ### Remaining opportunities
 - stronger session header / mini overview
 - better “what matters now” prioritization
-- dedicated verdict / interpretation layer above raw event details
+- better cross-session prioritization once many agents are active simultaneously
 
 ---
 
@@ -211,16 +211,23 @@ Move from “see logs” to “recognize patterns faster”.
 Make a single event easier to inspect without opening raw files or session logs.
 
 ### Status
-**v1 completed, second round still needed.**
+**v2 completed.**
 
-### Remaining priorities
+### Delivered in v2
 - split usage into:
   - input
   - output
   - total
-- normalize provider / model / stopReason presentation
-- make source / tool / session summary stronger
-- improve long-text readability for thinking / reply content
+  - cache read
+  - cache write
+- normalized provider / model / stopReason presentation
+- strengthened source / tool / session summary
+- added drawer verdict layer for faster first-pass interpretation
+- improved desktop drawer readability by switching summary cards to label-above-value layout
+
+### Remaining priorities
+- improve long-text readability for very large thinking / reply content
+- decide whether session timeline should grow into a larger drill-down surface or stay drawer-scoped
 
 ---
 
@@ -295,84 +302,26 @@ This means:
 
 This section replaces the earlier broad backlog with a more concrete next-step sequence.
 
-### Next Step 1 — P5-E.2: Session-first live status refinement
+### Next Step 1 — P5-A / P5-C follow-up: Session mini header refinement
 
-**Goal:** make live status more truthful and less shallow.
+**Goal:** make focused session debugging feel more intentional and less like a filter state.
 
 #### Scope
-- move from “agent-level last event” toward “session-first status, then agent summary”
-- distinguish better between:
-  - thinking
-  - waiting-model
-  - tool-call-pending
-  - tool-running
-  - tool-failed
-  - reply-streaming
-  - reply-done
-  - idle
-- track status duration more explicitly
-- attach current tool name and current session context more reliably
+- enrich the session focus bar into a stronger mini header
+- expose more of the currently focused session context directly:
+  - current status
+  - status duration
+  - current tool
+  - recent event count
+- reduce the need to open the drawer just to understand focused session state
 
 #### Why this comes first
-Because the current v1 already helps, but it still leaves the most important unanswered question partially open:
-
-> what exactly is the agent doing *right now*?
-
-This is the single most valuable improvement left in the monitor.
-
-#### Expected deliverables
-- per-session live status state machine in backend
-- better agent summary derived from most active session
-- status duration in UI
-- clearer waiting / running / idle transitions
+Because session focus already exists and works.
+The next useful step is to make it feel like a true debugging mode, not only a feed filter.
 
 ---
 
-### Next Step 2 — P5-A.2: Session drill-down view
-
-**Goal:** make it easier to debug one session as a continuous thread instead of isolated cards.
-
-#### Scope
-- session filter or session quick-focus entry
-- session drill-down panel or focused list mode
-- show latest N events for a selected session
-- make live status and activity stream work together
-
-#### Why this comes second
-Live status tells you **what is happening now**.
-Session drill-down tells you **how you got here**.
-These two features should land together conceptually, but live status refinement is the stronger prerequisite.
-
-#### Expected deliverables
-- session focus UI
-- session timeline view or filtered mode
-- easier handoff from status card to event-level investigation
-
----
-
-### Next Step 3 — P5-C.2: Usage and provider detail refinement
-
-**Goal:** make the drawer more useful for real debugging and performance reading.
-
-#### Scope
-- split token usage into:
-  - input
-  - output
-  - total
-- normalize provider / model / stopReason fields
-- improve summary rows for:
-  - tool
-  - source
-  - session
-  - provider context
-
-#### Why this is third
-It is important, but it is less transformative than live status refinement and session drill-down.
-It improves the investigation experience after the bigger realtime/status model is stronger.
-
----
-
-### Next Step 4 — P5-E.3: Provider-aware status research
+### Next Step 2 — P5-E.3: Provider-aware status research
 
 **Goal:** find out how far Agent Monitor can go beyond heuristic states.
 
@@ -396,7 +345,7 @@ This work is partially product, partially platform research.
 ## Recommended Priority Order
 
 ### Updated priority
-1. **P5-A / P5-C follow-up — verdict layer + session mini header**
+1. **P5-A / P5-C follow-up — session mini header refinement**
 2. **P5-E.3 — Provider-aware status research**
 3. **P5-D follow-up — Workspace only if new concrete pain appears**
 
@@ -429,6 +378,6 @@ It should be judged by whether it improves real debugging speed and trust.
 
 ## One-line conclusion
 
-**Phase 5 has already completed the first strong round of error investigation improvements, workspace productization, hybrid realtime transport, and v1 live status.**
+**Phase 5 has already completed a strong second round of live status refinement, session-focused debugging, drawer investigation improvements, provider error surfacing, and workspace productization.**
 
-**The next phase should focus on making live status more truthful and making session-level debugging first-class.**
+**The next phase should focus on making focused session debugging even clearer and, if OpenClaw allows it, pushing status closer to provider-aware truth.**
