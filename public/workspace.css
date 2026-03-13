@@ -87,6 +87,7 @@ body {
   position: sticky;
   top: 14px;
   overflow: hidden;
+  align-self: start;
 }
 
 .sidebar-topbar {
@@ -190,6 +191,10 @@ body {
 }
 .file-tree { list-style: none; }
 .file-tree li { margin: 2px 0; }
+.file-link[data-hidden="1"],
+.directory[data-hidden="1"] {
+  display: none !important;
+}
 .dir-header, .file-link {
   display: flex;
   align-items: center;
@@ -239,6 +244,7 @@ body {
   gap: 12px;
   grid-template-rows: auto auto 1fr;
   min-height: 0;
+  min-width: 0;
 }
 
 .workspace-header {
@@ -321,7 +327,9 @@ body {
 .breadcrumb a { color: var(--neon-cyan); text-decoration: none; }
 .breadcrumb a:hover { text-decoration: underline; }
 
-.file-detail-shell { }
+.file-detail-shell {
+  min-width: 0;
+}
 .file-meta-bar {
   display: flex;
   align-items: center;
@@ -378,7 +386,7 @@ body {
 
 @media (max-width: 768px) {
   .workspace-layout { grid-template-columns: 1fr; }
-  .workspace-sidebar { display: none; height: auto; max-height: 70vh; position: static; }
+  .workspace-sidebar { display: none; height: auto; max-height: 70vh; position: static; top: auto; }
   .workspace-sidebar.is-open { display: flex; }
   .workspace-main { display: block; }
   .mobile-only { display: flex; }

@@ -90,8 +90,8 @@
       if (!lower) {
         allFiles.forEach(f => f.removeAttribute('data-hidden'));
         allDirs.forEach(d => {
-          const parent = d.closest('li');
-          if (parent) parent.style.display = '';
+          const parent = d.closest('li.directory');
+          if (parent) parent.removeAttribute('data-hidden');
         });
         treeContainer.querySelectorAll('.dir-content').forEach(c => c.classList.add('collapsed'));
         treeContainer.querySelectorAll('.dir-header').forEach(h => h.classList.remove('expanded'));
@@ -125,8 +125,11 @@
         const nameEl = h.querySelector('.dir-name');
         const dirName = nameEl?.textContent || '';
         const isMatch = dirName.toLowerCase().includes(lower) || matchedPaths.has(dirName);
-        const parent = h.closest('li');
-        if (parent) parent.style.display = isMatch ? '' : 'none';
+        const parent = h.closest('li.directory');
+        if (parent) {
+          if (isMatch) parent.removeAttribute('data-hidden');
+          else parent.setAttribute('data-hidden', '1');
+        }
         if (isMatch) {
           h.classList.add('expanded');
           const content = h.nextElementSibling;
