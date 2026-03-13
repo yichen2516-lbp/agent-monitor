@@ -390,6 +390,15 @@ body {
   color: var(--text-muted);
   font-size: 12px;
 }
+.inline-error-notice {
+  border-color: rgba(255,55,95,0.34);
+  background: rgba(30,10,16,0.78);
+}
+.inline-error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
 .file-view-content pre {
   margin: 0;
   white-space: pre-wrap;

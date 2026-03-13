@@ -82,6 +82,40 @@ function renderBinaryContent(fileName, size) {
     </div>`;
 }
 
+function renderFileViewPage({ template, agents, agentKey, config, fileTree, fileCount, dirCount, fileName, filePath, fileType, fileSize, fileIcon, breadcrumbs, contentHtml, statusCode = 200 }) {
+  const agentTabs = Object.entries(agents).map(([key, cfg]) => {
+    const isActive = key === agentKey;
+    const activeStyle = isActive ? `style="background: linear-gradient(180deg, rgba(0,229,255,0.14), rgba(0,229,255,0.08)); border-color: rgba(0,229,255,0.6); color: #e0fdff;"` : '';
+    return `<a href="?agent=${encodeURIComponent(key)}" class="agent-tab ${isActive ? 'active' : ''}" ${activeStyle}>
+      <span>${cfg.emoji}</span>
+      <span>${escapeHtml(cfg.name)}</span>
+    </a>`;
+  }).join('');
+
+  const html = renderTemplate(template, {
+    TITLE: escapeHtml(`${fileName} - ${config.name} Workspace`),
+    BODY_CLASS: 'file-view-page',
+    AGENT: encodeURIComponent(agentKey),
+    AGENT_KEY: escapeHtml(agentKey),
+    AGENT_NAME: escapeHtml(config.name),
+    AGENT_EMOJI: config.emoji,
+    AGENT_COLOR: config.color,
+    AGENT_TABS: agentTabs,
+    FILE_TREE: fileTree,
+    FILE_COUNT: fileCount,
+    DIR_COUNT: dirCount,
+    FILE_NAME: escapeHtml(fileName),
+    FILE_ICON: fileIcon,
+    FILE_SIZE: escapeHtml(fileSize),
+    FILE_TYPE: escapeHtml(fileType),
+    BREADCRUMBS: breadcrumbs,
+    CONTENT_HTML: contentHtml,
+    CURRENT_FILE_PATH: escapeHtml(filePath)
+  });
+
+  return { html, statusCode };
+}
+
 function createWorkspaceRouter({ baseDir }) {
   const router = express.Router();
   const workspaceTemplate = fs.readFileSync(path.join(baseDir, 'views', 'workspace.html'), 'utf8');
@@ -98,11 +132,55 @@ function createWorkspaceRouter({ baseDir }) {
     }).join('');
   }
 
-  function resolveWorkspaceFile(req, res) {
+  function buildFileNotFoundPage(req) {
+    const agents = getWorkspaceAgents();
+    const agentKey = getValidWorkspaceAgent(req.query.agent || 'main');
+    const config = agents[agentKey];
+    if (!config) return null;
+
+    const requestedPath = decodeURIComponent(req.params[0] || '');
+    const files = getFileList(config.workspace);
+    const fileTree = generateWorkspaceTree(files, agentKey);
+    const { fileCount, dirCount } = countTree(files);
+    const breadcrumbs = `<span style="color:var(--neon-yellow)">Missing file</span>`;
+    const contentHtml = `
+      <div class="file-view-content binary-file-notice inline-error-notice">
+        <div class="binary-file-title">File not found</div>
+        <div class="binary-file-text">The requested file does not exist anymore, or the path is no longer valid.</div>
+        <div class="binary-file-meta">Requested path: ${escapeHtml(requestedPath || '(empty)')}</div>
+        <div class="inline-error-actions">
+          <a href="/workspace?agent=${encodeURIComponent(agentKey)}" class="nav-link">Back to workspace</a>
+        </div>
+      </div>`;
+
+    return renderFileViewPage({
+      template: workspaceViewTemplate,
+      agents,
+      agentKey,
+      config,
+      fileTree,
+      fileCount,
+      dirCount,
+      fileName: 'File not found',
+      filePath: requestedPath || 'Missing file',
+      fileType: 'missing',
+      fileSize: '—',
+      fileIcon: '⚠️',
+      breadcrumbs,
+      contentHtml,
+      statusCode: 404
+    });
+  }
+
+  function resolveWorkspaceFile(req, res, options = {}) {
     const agents = getWorkspaceAgents();
     const agentKey = getValidWorkspaceAgent(req.query.agent || 'main');
     const config = agents[agentKey];
     if (!config) {
+      if (options.inlineOnMissing) {
+        const fallback = buildFileNotFoundPage(req);
+        if (fallback) return res.status(fallback.statusCode).send(fallback.html);
+      }
       res.status(404).send('Workspace not found');
       return null;
     }
@@ -110,6 +188,10 @@ function createWorkspaceRouter({ baseDir }) {
     const filePath = decodeURIComponent(req.params[0]);
     const fullPath = path.join(config.workspace, filePath);
     if (!isPathSafe(fullPath, config.workspace) || !fs.existsSync(fullPath)) {
+      if (options.inlineOnMissing) {
+        const fallback = buildFileNotFoundPage(req);
+        if (fallback) return res.status(fallback.statusCode).send(fallback.html);
+      }
       res.status(404).send('File not found');
       return null;
     }
@@ -162,7 +244,7 @@ function createWorkspaceRouter({ baseDir }) {
   });
 
   router.get('/workspace/view/*', (req, res) => {
-    const resolved = resolveWorkspaceFile(req, res);
+    const resolved = resolveWorkspaceFile(req, res, { inlineOnMissing: true });
     if (!resolved) return;
 
     const { agents, agentKey, config, filePath, fullPath } = resolved;
@@ -200,29 +282,25 @@ function createWorkspaceRouter({ baseDir }) {
     const files = getFileList(config.workspace);
     const fileTree = generateWorkspaceTree(files, agentKey);
     const { fileCount, dirCount } = countTree(files);
-    const agentTabs = makeAgentTabs(agents, agentKey);
-
-    const html = renderTemplate(workspaceViewTemplate, {
-      TITLE: escapeHtml(`${fileName} - ${config.name} Workspace`),
-      BODY_CLASS: 'file-view-page',
-      AGENT: encodeURIComponent(agentKey),
-      AGENT_KEY: escapeHtml(agentKey),
-      AGENT_NAME: escapeHtml(config.name),
-      AGENT_EMOJI: config.emoji,
-      AGENT_COLOR: config.color,
-      AGENT_TABS: agentTabs,
-      FILE_TREE: fileTree,
-      FILE_COUNT: fileCount,
-      DIR_COUNT: dirCount,
-      FILE_NAME: escapeHtml(fileName),
-      FILE_ICON: getFileIcon(fileName),
-      FILE_SIZE: escapeHtml(formatFileSize(stat.size)),
-      FILE_TYPE: escapeHtml(ext || 'text'),
-      BREADCRUMBS: breadcrumbs,
-      CONTENT_HTML: contentHtml,
-      CURRENT_FILE_PATH: escapeHtml(filePath)
+    const page = renderFileViewPage({
+      template: workspaceViewTemplate,
+      agents,
+      agentKey,
+      config,
+      fileTree,
+      fileCount,
+      dirCount,
+      fileName,
+      filePath,
+      fileType: ext || 'text',
+      fileSize: formatFileSize(stat.size),
+      fileIcon: getFileIcon(fileName),
+      breadcrumbs,
+      contentHtml,
+      statusCode: 200
     });
-    res.send(html);
+
+    res.status(page.statusCode).send(page.html);
   });
 
   return router;
