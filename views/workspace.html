@@ -4,42 +4,85 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{TITLE}}</title>
-  <link rel="stylesheet" href="/public/workspace.css">
+  <link rel="stylesheet" href="/public/workspace.css?v=20260313-p5d1">
 </head>
-<body>
-  <div class="container workspace-page">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-title">📁 文件列表</div>
-        <div class="agent-tabs">{{AGENT_TABS}}</div>
+<body class="workspace-shell {{BODY_CLASS}}" data-agent="{{AGENT_KEY}}" data-page="workspace-home">
+  <div class="bg-grid"></div>
+  <div class="bg-vig"></div>
+
+  <div class="workspace-layout">
+    <aside class="workspace-sidebar" id="workspace-sidebar">
+      <div class="sidebar-topbar">
+        <div>
+          <div class="sidebar-kicker">⚡ Agent Monitor</div>
+          <div class="sidebar-title">Workspace Browser</div>
+        </div>
+        <button class="sidebar-close mobile-only" id="sidebar-close-btn" type="button">✕</button>
       </div>
-      <div class="file-tree-container">{{FILE_TREE}}</div>
+
+      <div class="agent-tabs">{{AGENT_TABS}}</div>
+
+      <div class="sidebar-search-wrap">
+        <input id="workspace-search" class="workspace-search" type="text" placeholder="Search files in current workspace..." autocomplete="off" />
+        <div class="search-meta"><span id="search-count">{{FILE_COUNT}}</span> items</div>
+      </div>
+
+      <div class="sidebar-section-label">Files</div>
+      <div class="file-tree-container" id="file-tree-container">{{FILE_TREE}}</div>
     </aside>
-    <main class="main">
-      <div class="header-nav">
-        <a href="/">← 返回 Monitor</a>
-        <span class="header-sep">|</span>
-        <span class="header-subtitle">{{AGENT_NAME}}'s Workspace</span>
-      </div>
-      <div class="welcome">
-        <div class="welcome-emoji">{{AGENT_EMOJI}}</div>
-        <h2>{{AGENT_NAME}}'s Workspace</h2>
-        <p>从左侧选择文件开始浏览</p>
-        <div class="path">{{WORKSPACE_PATH}}</div>
-        <div class="stats">
-          <div class="stat-box" style="--color:{{AGENT_COLOR}}">
-            <div class="stat-value">{{FILE_COUNT}}</div>
-            <div class="stat-label">文件</div>
-          </div>
-          <div class="stat-box" style="--color:#58a6ff">
-            <div class="stat-value">{{DIR_COUNT}}</div>
-            <div class="stat-label">文件夹</div>
+
+    <main class="workspace-main" id="workspace-main">
+      <header class="workspace-header hud-panel">
+        <div class="header-left">
+          <button class="sidebar-open mobile-only" id="sidebar-open-btn" type="button">📂</button>
+          <div>
+            <div class="header-kicker">{{AGENT_EMOJI}} {{AGENT_NAME}}</div>
+            <h1>Workspace Overview</h1>
           </div>
         </div>
-      </div>
+        <div class="header-actions">
+          <a href="/" class="nav-link">← Monitor</a>
+        </div>
+      </header>
+
+      <section class="workspace-hero hud-panel">
+        <div class="hero-copy">
+          <div class="hero-label">Current Workspace</div>
+          <div class="hero-path">{{WORKSPACE_PATH}}</div>
+          <p>左侧搜索 + 树导航会保留状态，不用每次重新展开目录找文件。</p>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat-card" style="--accent:{{AGENT_COLOR}}">
+            <div class="stat-value">{{FILE_COUNT}}</div>
+            <div class="stat-label">Files</div>
+          </div>
+          <div class="hero-stat-card" style="--accent:#58a6ff">
+            <div class="stat-value">{{DIR_COUNT}}</div>
+            <div class="stat-label">Directories</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace-tips hud-panel">
+        <div class="panel-title">How to use</div>
+        <div class="tips-grid">
+          <div class="tip-card">
+            <div class="tip-title">Search first</div>
+            <div class="tip-text">先按文件名过滤，再展开结果，减少树形导航来回翻。</div>
+          </div>
+          <div class="tip-card">
+            <div class="tip-title">State is remembered</div>
+            <div class="tip-text">会记住当前 agent、目录展开状态、搜索词和上次浏览文件。</div>
+          </div>
+          <div class="tip-card">
+            <div class="tip-title">Single workspace shell</div>
+            <div class="tip-text">文件页和首页共用同一套侧栏，不再切页后失去上下文。</div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
-  <button class="mobile-toggle" onclick="toggleSidebar()" title="切换侧边栏">📂</button>
-  <script src="/public/workspace.js"></script>
+
+  <script src="/public/workspace.js?v=20260313-p5d1"></script>
 </body>
 </html>

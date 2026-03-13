@@ -41,7 +41,6 @@ function renderMarkdown(content) {
 function countTree(items) {
   let fileCount = 0;
   let dirCount = 0;
-
   function walk(nodes) {
     for (const item of nodes) {
       if (item.type === 'file') fileCount += 1;
@@ -51,7 +50,6 @@ function countTree(items) {
       }
     }
   }
-
   walk(items);
   return { fileCount, dirCount };
 }
@@ -61,23 +59,32 @@ function createWorkspaceRouter({ baseDir }) {
   const workspaceTemplate = fs.readFileSync(path.join(baseDir, 'views', 'workspace.html'), 'utf8');
   const workspaceViewTemplate = fs.readFileSync(path.join(baseDir, 'views', 'workspace-view.html'), 'utf8');
 
-  router.get('/workspace', (req, res) => {
-    const agents = getWorkspaceAgents();
-    const agent = getValidWorkspaceAgent(req.query.agent || 'main');
-    const config = agents[agent];
-    const files = getFileList(config.workspace);
-    const fileTree = generateWorkspaceTree(files, agent);
-    const { fileCount, dirCount } = countTree(files);
-
-    const agentTabs = Object.entries(agents).map(([key, cfg]) => `
-      <a href="?agent=${encodeURIComponent(key)}" class="agent-tab ${key === agent ? 'active' : ''}" style="${key === agent ? `--color: ${cfg.color}` : ''}">
+  function makeAgentTabs(agents, currentAgent) {
+    return Object.entries(agents).map(([key, cfg]) => {
+      const isActive = key === currentAgent;
+      const activeStyle = isActive ? `style="background: linear-gradient(180deg, rgba(0,229,255,0.14), rgba(0,229,255,0.08)); border-color: rgba(0,229,255,0.6); color: #e0fdff;"` : '';
+      return `<a href="?agent=${encodeURIComponent(key)}" class="agent-tab ${isActive ? 'active' : ''}" ${activeStyle}>
         <span>${cfg.emoji}</span>
         <span>${escapeHtml(cfg.name)}</span>
-      </a>
-    `).join('');
+      </a>`;
+    }).join('');
+  }
+
+  router.get('/workspace', (req, res) => {
+    const agents = getWorkspaceAgents();
+    const agentKey = getValidWorkspaceAgent(req.query.agent || 'main');
+    const config = agents[agentKey];
+    if (!config) return res.status(404).send('Workspace not found');
+
+    const files = getFileList(config.workspace);
+    const fileTree = generateWorkspaceTree(files, agentKey);
+    const { fileCount, dirCount } = countTree(files);
+    const agentTabs = makeAgentTabs(agents, agentKey);
 
     const html = renderTemplate(workspaceTemplate, {
-      TITLE: escapeHtml(`Workspace Browser - ${config.name}`),
+      TITLE: escapeHtml(`${config.name} Workspace - Agent Monitor`),
+      BODY_CLASS: '',
+      AGENT_KEY: escapeHtml(agentKey),
       AGENT_TABS: agentTabs,
       FILE_TREE: fileTree,
       AGENT_NAME: escapeHtml(config.name),
@@ -87,19 +94,20 @@ function createWorkspaceRouter({ baseDir }) {
       DIR_COUNT: dirCount,
       AGENT_COLOR: config.color
     });
-
     res.send(html);
   });
 
   router.get('/workspace/view/*', (req, res) => {
     const agents = getWorkspaceAgents();
-    const agent = getValidWorkspaceAgent(req.query.agent || 'main');
-    const config = agents[agent];
+    const agentKey = getValidWorkspaceAgent(req.query.agent || 'main');
+    const config = agents[agentKey];
+    if (!config) return res.status(404).send('Workspace not found');
+
     const filePath = decodeURIComponent(req.params[0]);
     const fullPath = path.join(config.workspace, filePath);
 
     if (!isPathSafe(fullPath, config.workspace) || !fs.existsSync(fullPath)) {
-      return res.status(404).send('文件不存在');
+      return res.status(404).send('File not found');
     }
 
     const stat = fs.statSync(fullPath);
@@ -115,7 +123,7 @@ function createWorkspaceRouter({ baseDir }) {
         contentHtml = `<div class="file-view-content"><pre>${escapeHtml(content)}</pre></div>`;
       }
     } catch (e) {
-      contentHtml = `<div class="file-view-content"><p style="color:#f85149">无法读取文件: ${escapeHtml(e.message)}</p></div>`;
+      contentHtml = `<div class="file-view-content"><p style="color:var(--neon-red)">Unable to read file: ${escapeHtml(e.message)}</p></div>`;
     }
 
     const parts = filePath.split('/').filter(Boolean);
@@ -123,20 +131,34 @@ function createWorkspaceRouter({ baseDir }) {
     const breadcrumbs = parts.map((part, i) => {
       breadcrumbPath += '/' + part;
       const isLast = i === parts.length - 1;
-      if (isLast) return `<span style="color:#f0f6fc">${escapeHtml(part)}</span>`;
-      return `<a href="/workspace/view/${encodeURIComponent(breadcrumbPath)}?agent=${encodeURIComponent(agent)}">${escapeHtml(part)}</a>`;
+      if (isLast) return `<span style="color:var(--neon-yellow)">${escapeHtml(part)}</span>`;
+      return `<a href="/workspace/view/${encodeURIComponent(breadcrumbPath)}?agent=${encodeURIComponent(agentKey)}">${escapeHtml(part)}</a>`;
     }).join('<span class="breadcrumb-sep">/</span>');
 
+    const files = getFileList(config.workspace);
+    const fileTree = generateWorkspaceTree(files, agentKey);
+    const { fileCount, dirCount } = countTree(files);
+    const agentTabs = makeAgentTabs(agents, agentKey);
+
     const html = renderTemplate(workspaceViewTemplate, {
-      TITLE: escapeHtml(`${fileName} - Workspace`),
+      TITLE: escapeHtml(`${fileName} - ${config.name} Workspace`),
+      BODY_CLASS: 'file-view-page',
+      AGENT: encodeURIComponent(agentKey),
+      AGENT_KEY: escapeHtml(agentKey),
+      AGENT_NAME: escapeHtml(config.name),
+      AGENT_EMOJI: config.emoji,
+      AGENT_COLOR: config.color,
+      FILE_TREE: fileTree,
+      FILE_COUNT: fileCount,
+      DIR_COUNT: dirCount,
       FILE_NAME: escapeHtml(fileName),
-      AGENT: encodeURIComponent(agent),
-      BREADCRUMBS: breadcrumbs,
       FILE_ICON: getFileIcon(fileName),
       FILE_SIZE: escapeHtml(formatFileSize(stat.size)),
-      CONTENT_HTML: contentHtml
+      FILE_TYPE: escapeHtml(ext || 'text'),
+      BREADCRUMBS: breadcrumbs,
+      CONTENT_HTML: contentHtml,
+      CURRENT_FILE_PATH: escapeHtml(filePath)
     });
-
     res.send(html);
   });
 

@@ -4,34 +4,72 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{TITLE}}</title>
-  <link rel="stylesheet" href="/public/workspace.css">
+  <link rel="stylesheet" href="/public/workspace.css?v=20260313-p5d1">
 </head>
-<body class="file-view-page">
-  <div class="container">
-    <aside class="sidebar compact">
-      <div class="sidebar-header">
-        <div class="sidebar-title">📂 {{FILE_NAME}}</div>
+<body class="workspace-shell file-view-page {{BODY_CLASS}}" data-agent="{{AGENT}}" data-page="workspace-file" data-current-file="{{CURRENT_FILE_PATH}}">
+  <div class="bg-grid"></div>
+  <div class="bg-vig"></div>
+
+  <div class="workspace-layout">
+    <aside class="workspace-sidebar" id="workspace-sidebar">
+      <div class="sidebar-topbar">
+        <div>
+          <div class="sidebar-kicker">⚡ Agent Monitor</div>
+          <div class="sidebar-title">Workspace Browser</div>
+        </div>
+        <button class="sidebar-close mobile-only" id="sidebar-close-btn" type="button">✕</button>
       </div>
+
+      <div class="agent-tabs">{{AGENT_TABS}}</div>
+
+      <div class="sidebar-search-wrap">
+        <input id="workspace-search" class="workspace-search" type="text" placeholder="Search files in current workspace..." autocomplete="off" />
+        <div class="search-meta"><span id="search-count">{{FILE_COUNT}}</span> items</div>
+      </div>
+
+      <div class="sidebar-section-label">Files</div>
+      <div class="file-tree-container" id="file-tree-container">{{FILE_TREE}}</div>
     </aside>
-    <main class="main">
-      <div class="header-nav">
-        <a href="/">← 返回 Monitor</a>
-        <a href="/workspace?agent={{AGENT}}">← 返回 Workspace</a>
-      </div>
-      <div class="breadcrumb">
-        <a href="/workspace?agent={{AGENT}}">📂 Home</a>
-        <span class="breadcrumb-sep">/</span>
-        {{BREADCRUMBS}}
-      </div>
-      <div class="file-view">
-        <div class="file-view-header">
-          <span>{{FILE_ICON}}</span>
-          <span class="file-view-name">{{FILE_NAME}}</span>
-          <span class="file-view-size">{{FILE_SIZE}}</span>
+
+    <main class="workspace-main" id="workspace-main">
+      <header class="workspace-header hud-panel">
+        <div class="header-left">
+          <button class="sidebar-open mobile-only" id="sidebar-open-btn" type="button">📂</button>
+          <div>
+            <div class="header-kicker">{{AGENT_EMOJI}} {{AGENT_NAME}}</div>
+            <h1>{{FILE_NAME}}</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <a href="/" class="nav-link">← Monitor</a>
+          <a href="/workspace?agent={{AGENT}}" class="nav-link">Workspace Home</a>
+        </div>
+      </header>
+
+      <section class="workspace-breadcrumb hud-panel">
+        <div class="panel-title">Path</div>
+        <div class="breadcrumb">{{BREADCRUMBS}}</div>
+      </section>
+
+      <section class="file-detail-shell hud-panel">
+        <div class="file-meta-bar">
+          <div class="file-meta-left">
+            <span class="file-icon-large">{{FILE_ICON}}</span>
+            <div>
+              <div class="file-name-main">{{FILE_NAME}}</div>
+              <div class="file-sub-meta">{{CURRENT_FILE_PATH}}</div>
+            </div>
+          </div>
+          <div class="file-badges">
+            <span class="meta-badge">{{FILE_SIZE}}</span>
+            <span class="meta-badge">{{FILE_TYPE}}</span>
+          </div>
         </div>
         {{CONTENT_HTML}}
-      </div>
+      </section>
     </main>
   </div>
+
+  <script src="/public/workspace.js?v=20260313-p5d1"></script>
 </body>
 </html>
