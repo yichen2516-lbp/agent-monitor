@@ -67,10 +67,13 @@ Delivered:
 - normalized provider / model / stopReason presentation
 - stronger source / session context in drawer
 - same-session recent timeline added inside drawer for faster continuous investigation
+- verdict layer added above raw details for faster first-pass interpretation
+- desktop drawer readability improved by switching summary cards to label-above-value layout
+- outer activity usage badge changed from total-only display to input/output-oriented display
 
 Current status:
 - strong enough for real first-pass debugging
-- next refinement should focus on verdict / interpretation, not raw field expansion
+- next refinement should focus on focused session context and larger drill-down decisions, not more raw fields
 
 #### P5-D: Workspace Browser productization (second round completed)
 Delivered in this phase:
@@ -143,6 +146,28 @@ Delivered:
 Representative commit:
 - `62c731e` — `docs(readme): rewrite project documentation in english`
 
+#### P5-F: PWA packaging + feed performance tightening (completed)
+Delivered:
+- PWA installability for Chrome / Safari
+  - web manifest
+  - service worker shell
+  - app icons / apple touch icon
+  - install entry button in monitor + workspace pages
+- install compatibility metadata added across monitor / workspace surfaces
+- performance fixes for installed-webapp usage
+  - stop repeatedly reloading unchanged cron runs
+  - avoid replay-style startup emit flood during initial load
+  - reduce default server activity cap
+  - reduce client activity cache cap
+  - switch main feed to incremental page rendering
+  - default render only latest 50 items with `Load More`
+- regression suite kept green after performance cuts
+
+Outcome:
+- Agent Monitor is now installable as a desktop web app
+- the earlier feed jank caused by oversized record rendering is materially reduced
+- current product baseline is now good enough for a release cut
+
 ---
 
 ## What changed in priority
@@ -183,6 +208,7 @@ Substantially moved forward through:
 - stronger session header / mini overview
 - better “what matters now” prioritization
 - better cross-session prioritization once many agents are active simultaneously
+- decide whether session focus should stay lightweight or become a larger session drill-down surface
 
 ---
 
@@ -224,6 +250,7 @@ Make a single event easier to inspect without opening raw files or session logs.
 - strengthened source / tool / session summary
 - added drawer verdict layer for faster first-pass interpretation
 - improved desktop drawer readability by switching summary cards to label-above-value layout
+- changed outer activity usage badge to input/output-oriented display instead of total-only display
 
 ### Remaining priorities
 - improve long-text readability for very large thinking / reply content
@@ -318,6 +345,10 @@ This section replaces the earlier broad backlog with a more concrete next-step s
 #### Why this comes first
 Because session focus already exists and works.
 The next useful step is to make it feel like a true debugging mode, not only a feed filter.
+
+#### Status note (2026-03-13 end of day)
+This remains the clearest product follow-up for the next work session.
+It is small enough to ship quickly and meaningful enough to improve day-to-day debugging immediately.
 
 ---
 

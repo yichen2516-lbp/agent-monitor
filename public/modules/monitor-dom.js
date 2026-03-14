@@ -27,6 +27,7 @@ window.AgentMonitor.dom = {
       sessionFocusBarEl: document.getElementById('session-focus-bar'),
       sessionFocusLabelEl: document.getElementById('session-focus-label'),
       sessionFocusClearEl: document.getElementById('session-focus-clear'),
+      feedLoadMoreEl: document.getElementById('feed-load-more'),
       drawerOverlayEl: document.getElementById('drawer-overlay')
     };
   },

@@ -10,7 +10,8 @@ window.AgentMonitor.uiState = {
       filterErrorsOnly: refs.filterErrorsOnlyEl.checked,
       errorAggregateMode: state.errorAggregateMode,
       quickMode: state.quickMode,
-      selectedSessionKey: state.selectedSessionKey
+      selectedSessionKey: state.selectedSessionKey,
+      feedVisibleCount: state.feedVisibleCount
     };
     try {
       localStorage.setItem(state.STORAGE_KEY, JSON.stringify(snapshot));
@@ -35,6 +36,9 @@ window.AgentMonitor.uiState = {
       }
       if (typeof snapshot.selectedSessionKey === 'string' && snapshot.selectedSessionKey.trim()) {
         state.selectedSessionKey = snapshot.selectedSessionKey;
+      }
+      if (Number.isFinite(snapshot.feedVisibleCount) && snapshot.feedVisibleCount > 0) {
+        state.feedVisibleCount = snapshot.feedVisibleCount;
       }
     } catch (_) {}
   },

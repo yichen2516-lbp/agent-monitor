@@ -1,6 +1,6 @@
 {
   "name": "agent-monitor",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "OpenClaw Agent 实时状态监控 - 独立版",
   "main": "index.js",
   "scripts": {

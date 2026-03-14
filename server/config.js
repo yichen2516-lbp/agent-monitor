@@ -23,7 +23,8 @@ function loadConfig(baseDir) {
 
   return {
     agentsDir: process.env.AGENTS_DIR || fileConfig.agentsDir || getDefaultAgentsDir(),
-    maxActivities: Number(process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 300),
+    maxActivities: Number(process.env.MAX_ACTIVITIES || fileConfig.maxActivities || 160),
+    maxCronActivities: Number(process.env.MAX_CRON_ACTIVITIES || fileConfig.maxCronActivities || 20),
     pollInterval: Number(process.env.POLL_INTERVAL || fileConfig.pollInterval || 10000),
     refreshInterval: Number(process.env.REFRESH_INTERVAL || fileConfig.refreshInterval || 1000),
     logRetentionDays: Number(process.env.LOG_RETENTION_DAYS || fileConfig.logRetentionDays || 3),

@@ -78,7 +78,8 @@
       gap: 12px;
       margin-left: auto;
     }
-    .nav-links a {
+    .nav-links a,
+    .nav-action-btn {
       color: var(--text-muted);
       text-decoration: none;
       font-size: 12px;
@@ -88,11 +89,18 @@
       padding: 4px 10px;
       clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
       transition: color .15s ease, border-color .15s ease, background .15s ease;
+      font-family: inherit;
+      cursor: pointer;
     }
-    .nav-links a:hover {
+    .nav-links a:hover,
+    .nav-action-btn:hover {
       color: var(--neon-cyan);
       border-color: var(--neon-cyan);
       background: rgba(0,229,255,0.12);
+    }
+    .nav-action-btn[disabled] {
+      opacity: 0.55;
+      cursor: default;
     }
     .agent-tag {
       padding: 3px 9px;
@@ -236,6 +244,11 @@
     }
 
     .activity-list { display: flex; flex-direction: column; gap: 8px; }
+.feed-footer-actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 12px;
+    }
 
     .activity-item {
       display: block;

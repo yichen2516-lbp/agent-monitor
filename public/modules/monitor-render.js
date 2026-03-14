@@ -503,14 +503,21 @@ window.AgentMonitor.render = {
 
     const filtered = filters.applyFilters(state.latestActivities, refs);
     const visible = filters.aggregateErrorActivities(filtered);
+    const renderItems = visible.slice(0, state.feedVisibleCount);
     refs.listEl.innerHTML = '';
 
-    console.log('[Agent-Monitor] 更新列表:', visible.length, '/', state.latestActivities.length, 'activities');
-
-    if (visible.length === 0) {
+    if (renderItems.length === 0) {
       refs.listEl.innerHTML = '<div class="empty">No activities under current filters</div>';
     } else {
-      visible.forEach(activity => refs.listEl.appendChild(this.createActivityItem(activity)));
+      renderItems.forEach(activity => refs.listEl.appendChild(this.createActivityItem(activity)));
+    }
+
+    if (refs.feedLoadMoreEl) {
+      const hasMore = visible.length > renderItems.length;
+      refs.feedLoadMoreEl.hidden = !hasMore;
+      refs.feedLoadMoreEl.textContent = hasMore
+        ? `Load More (${renderItems.length}/${visible.length})`
+        : 'Load More';
     }
 
     refs.metricCardErrors5mEl?.classList.toggle('is-active', !!refs.filterErrorsOnlyEl.checked);
@@ -529,6 +536,7 @@ window.AgentMonitor.render = {
     const filters = window.AgentMonitor.filters;
 
     state.latestActivities = activities || [];
+    state.feedVisibleCount = Math.max(state.FEED_PAGE_SIZE, Math.min(state.feedVisibleCount, state.MAX_CLIENT_ACTIVITIES));
     const signature = state.latestActivities.slice(0, 120).map(formatters.getActivityKey).join('||');
     if (signature === state.lastRenderedSignature) {
       filters.updateMetrics(

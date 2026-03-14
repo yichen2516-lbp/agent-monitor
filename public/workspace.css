@@ -355,7 +355,8 @@ body.mobile-sidebar-open .workspace-main {
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
 }
 .sidebar-open:hover { background: rgba(0,229,255,0.16); }
-.nav-link {
+.nav-link,
+.nav-action-btn {
   color: #8b949e;
   text-decoration: none;
   font-size: 12px;
@@ -363,10 +364,14 @@ body.mobile-sidebar-open .workspace-main {
   border: 1px solid var(--line-strong);
   background: rgba(0,229,255,0.06);
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
-  transition: border-color .12s ease, color .12s ease;
+  transition: border-color .12s ease, color .12s ease, background .12s ease;
+  font-family: inherit;
+  cursor: pointer;
 }
-.nav-link:hover { color: var(--neon-cyan); border-color: rgba(0,229,255,0.45); }
-.nav-link.is-disabled {
+.nav-link:hover,
+.nav-action-btn:hover { color: var(--neon-cyan); border-color: rgba(0,229,255,0.45); background: rgba(0,229,255,0.12); }
+.nav-link.is-disabled,
+.nav-action-btn[disabled] {
   opacity: 0.45;
   pointer-events: none;
 }

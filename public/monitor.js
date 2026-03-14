@@ -62,6 +62,7 @@
       state.errorAggregateMode = false;
       state.quickMode = 'all';
       state.selectedSessionKey = null;
+      state.feedVisibleCount = state.FEED_PAGE_SIZE;
       refs.toggleErrorAggregateEl.textContent = 'Error Aggregate: Off';
       render.renderFilteredList(refs);
       uiState.save(refs);
@@ -80,6 +81,13 @@
     refs.quickCronErrorsEl?.addEventListener('click', () => setQuickMode('cron-errors'));
     refs.sessionFocusClearEl?.addEventListener('click', () => {
       state.selectedSessionKey = null;
+      state.feedVisibleCount = state.FEED_PAGE_SIZE;
+      render.renderFilteredList(refs);
+      uiState.save(refs);
+    });
+
+    refs.feedLoadMoreEl?.addEventListener('click', () => {
+      state.feedVisibleCount += state.FEED_PAGE_SIZE;
       render.renderFilteredList(refs);
       uiState.save(refs);
     });
@@ -90,7 +98,10 @@
         const eventKey = activityTrigger.dataset.openActivity || '';
         const target = state.latestActivities.find(item => `${item.timestamp}|${item.type}|${item.description || ''}` === eventKey);
         const sessionKey = activityTrigger.dataset.sessionFocus || null;
-        if (sessionKey) state.selectedSessionKey = sessionKey;
+        if (sessionKey) {
+        state.selectedSessionKey = sessionKey;
+        state.feedVisibleCount = state.FEED_PAGE_SIZE;
+      }
         if (target) {
           render.openDetail(target);
         } else {
@@ -104,6 +115,7 @@
       if (focusTrigger) {
         const sessionKey = focusTrigger.dataset.sessionFocus || null;
         state.selectedSessionKey = state.selectedSessionKey === sessionKey ? null : sessionKey;
+        state.feedVisibleCount = state.FEED_PAGE_SIZE;
         render.renderFilteredList(refs);
         uiState.save(refs);
         return;

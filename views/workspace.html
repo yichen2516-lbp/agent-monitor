@@ -3,8 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#040507">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Agent Monitor">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="Agent Monitor">
+  <meta name="description" content="Workspace browser for Agent Monitor.">
+  <link rel="manifest" href="/public/manifest.webmanifest">
+  <link rel="icon" href="/public/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/public/icons/apple-touch-icon-180.png">
   <title>{{TITLE}}</title>
-  <link rel="stylesheet" href="/public/workspace.css?v=20260313-p5d2">
+  <link rel="stylesheet" href="/public/workspace.css?v=20260314-pwa1">
 </head>
 <body class="workspace-shell {{BODY_CLASS}}" data-agent="{{AGENT_KEY}}" data-page="workspace-home">
   <div class="bg-grid"></div>
@@ -47,6 +57,7 @@
         </div>
         <div class="header-actions">
           <a href="/" class="nav-link">← Monitor</a>
+          <button type="button" class="nav-action-btn" id="install-app-btn">⬇︎ Install App</button>
         </div>
       </header>
 
@@ -97,6 +108,7 @@
   </div>
 
   <script id="workspace-search-index" type="application/json">{{SEARCH_INDEX_JSON}}</script>
-  <script src="/public/workspace.js?v=20260313-p5d2"></script>
+  <script src="/public/pwa.js?v=20260314-pwa1"></script>
+  <script src="/public/workspace.js?v=20260314-pwa1"></script>
 </body>
 </html>

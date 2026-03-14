@@ -44,7 +44,7 @@ window.AgentMonitor.poller = {
       if (seen.has(key)) continue;
       seen.add(key);
       dedup.push(activity);
-      if (dedup.length >= 300) break;
+      if (dedup.length >= state.MAX_CLIENT_ACTIVITIES) break;
     }
 
     render.updateList(dedup, refs);

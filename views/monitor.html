@@ -7,9 +7,19 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="Cache-Control" content="no-store">
+  <meta name="theme-color" content="#040507">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Agent Monitor">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="Agent Monitor">
+  <meta name="description" content="Realtime monitoring dashboard for OpenClaw agents.">
+  <link rel="manifest" href="/public/manifest.webmanifest">
+  <link rel="icon" href="/public/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/public/icons/apple-touch-icon-180.png">
   <title>Agent Monitor v1.4 - OpenClaw Live Status</title>
   <!-- v1.4: session-first live status refinement -->
-    <link rel="stylesheet" href="/public/monitor.css?v=20260313-2015">
+    <link rel="stylesheet" href="/public/monitor.css?v=20260314-pwa1">
 </head>
 <body>
   <div class="bg-grid"></div>
@@ -25,6 +35,7 @@
           <div class="connection-pill" id="connection-pill">CONNECTING</div>
           <div class="nav-links">
             <a href="/workspace">📂 Workspace</a>
+            <button type="button" class="nav-action-btn" id="install-app-btn">⬇︎ Install App</button>
           </div>
           <div class="agents-list" id="agents-list"></div>
         </div>
@@ -116,6 +127,9 @@
         <div id="activity-list" class="activity-list">
           <div class="empty">Loading...</div>
         </div>
+        <div class="feed-footer-actions">
+          <button id="feed-load-more" class="quick-btn" type="button" hidden>Load More</button>
+        </div>
       </section>
     </main>
   </div>
@@ -127,8 +141,9 @@
     <script src="/public/modules/monitor-filters.js?v=20260313-2015"></script>
     <script src="/public/modules/monitor-system-panel.js?v=20260313-2015"></script>
     <script src="/public/modules/monitor-render.js?v=20260313-2015"></script>
-    <script src="/public/modules/monitor-poller.js?v=20260313-2015"></script>
-    <script src="/public/monitor.js?v=20260313-2015"></script>
+    <script src="/public/modules/monitor-poller.js?v=20260314-pwa1"></script>
+    <script src="/public/pwa.js?v=20260314-pwa1"></script>
+    <script src="/public/monitor.js?v=20260314-pwa1"></script>
 
   <div id="drawer-overlay" class="drawer-overlay"></div>
   <aside id="detail-drawer" class="detail-drawer">

@@ -1,6 +1,9 @@
 window.AgentMonitor = window.AgentMonitor || {};
 
 window.AgentMonitor.state = {
+  MAX_CLIENT_ACTIVITIES: 120,
+  FEED_PAGE_SIZE: 50,
+  feedVisibleCount: 50,
   latestActivities: [],
   errorAggregateMode: false,
   pollCount: 0,

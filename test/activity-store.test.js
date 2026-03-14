@@ -4,12 +4,14 @@ const { createActivityStore } = require('../server/store/activity-store');
 
 test('activity store enforces limits and supports since filtering', () => {
   const store = createActivityStore({ maxActivities: 3, maxCronActivities: 2, activityMaxAgeHours: 24 });
+  const baseMs = Date.now() - (5 * 60 * 1000);
+  const ts = (offsetMinutes) => new Date(baseMs + offsetMinutes * 60 * 1000).toISOString();
 
   store.append([
-    { timestamp: '2026-03-13T05:00:00.000Z', type: 'reply', sessionName: 'a' },
-    { timestamp: '2026-03-13T05:01:00.000Z', type: 'reply', sessionName: 'b' },
-    { timestamp: '2026-03-13T05:02:00.000Z', type: 'reply', sessionName: 'c' },
-    { timestamp: '2026-03-13T05:03:00.000Z', type: 'reply', sessionName: 'd' }
+    { timestamp: ts(0), type: 'reply', sessionName: 'a' },
+    { timestamp: ts(1), type: 'reply', sessionName: 'b' },
+    { timestamp: ts(2), type: 'reply', sessionName: 'c' },
+    { timestamp: ts(3), type: 'reply', sessionName: 'd' }
   ], 'session', '/tmp/session.jsonl');
 
   const all = store.getStatus();
@@ -17,7 +19,7 @@ test('activity store enforces limits and supports since filtering', () => {
   assert.equal(all[0].sessionName, 'd');
   assert.equal(all[2].sessionName, 'b');
 
-  const since = store.getStatus('2026-03-13T05:01:30.000Z');
+  const since = store.getStatus(ts(1.5));
   assert.equal(since.length, 2);
   assert.equal(since[0].sessionName, 'd');
   assert.equal(since[1].sessionName, 'c');

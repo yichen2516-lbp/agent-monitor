@@ -231,9 +231,11 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
   const activityParser = createActivityParser({ toolCallState });
   const activityStore = createActivityStore({
     maxActivities: CONFIG.maxActivities,
+    maxCronActivities: CONFIG.maxCronActivities,
     activityMaxAgeHours: CONFIG.activityMaxAgeHours
   });
   const sessionStatusTracker = createSessionStatusTracker();
+  const loadedCronRuns = new Map();
 
   function getAllSessions() {
     const sessions = [];
@@ -292,25 +294,41 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
     return cronRuns;
   }
 
-  function loadFile(sessionInfo) {
-    const { agent, path: filePath, source, name } = sessionInfo;
+  function loadFile(sessionInfo, options = {}) {
+    const { agent, path: filePath, source, name, size, mtime } = sessionInfo;
+    const { emit = true } = options;
 
     try {
+      if (source === 'cron') {
+        const previous = loadedCronRuns.get(filePath);
+        const currentSize = Number(size || 0);
+        const currentMtime = mtime ? new Date(mtime).getTime() : 0;
+        if (previous && previous.size === currentSize && previous.mtimeMs === currentMtime) {
+          return { size: currentSize, sessionName: '' };
+        }
+        loadedCronRuns.set(filePath, { size: currentSize, mtimeMs: currentMtime });
+      }
+
       const content = fs.readFileSync(filePath, 'utf8');
       const lines = content.split('\n').filter(l => l.trim());
       const sessionName = name ? name.replace('.jsonl', '').slice(0, 8) : '';
       const parseLine = source === 'cron' ? parseCronLine : activityParser.parseLine;
+      const collectedActivities = [];
 
       for (const line of lines) {
         const activities = parseLine(line, agent, sessionName);
-        if (activities) {
-          const enrichedActivities = activities.map(activity => ({ ...activity, source: filePath }));
-          activityStore.append(activities, source, filePath);
-          emitActivities(enrichedActivities);
+        if (activities?.length) {
+          collectedActivities.push(...activities);
         }
       }
 
-      console.log(`[Agent-Monitor] Loaded ${source === 'cron' ? 'cron' : agent}: ${path.basename(filePath)} (${lines.length} lines)`);
+      if (collectedActivities.length > 0) {
+        const enrichedActivities = collectedActivities.map(activity => ({ ...activity, source: filePath }));
+        activityStore.append(collectedActivities, source, filePath);
+        if (emit) emitActivities(enrichedActivities);
+      }
+
+      console.log(`[Agent-Monitor] Loaded ${source === 'cron' ? 'cron' : agent}: ${path.basename(filePath)} (${lines.length} lines, ${collectedActivities.length} activities)`);
       return { size: fs.statSync(filePath).size, sessionName };
     } catch (e) {
       console.error(`[Agent-Monitor] Load failed ${agent}:`, e.message);
@@ -318,12 +336,12 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
     }
   }
 
-  function watchSession(sessionInfo) {
+  function watchSession(sessionInfo, options = {}) {
     const { agent } = sessionInfo;
     const existing = activeSessions.get(agent);
     if (existing?.watcher) existing.watcher.close();
 
-    const loaded = loadFile(sessionInfo);
+    const loaded = loadFile(sessionInfo, options);
     const sessionWatcher = createSessionWatcher({
       sessionInfo: { ...sessionInfo, sessionName: loaded.sessionName, initialSize: loaded.size },
       parseLine: activityParser.parseLine,
@@ -364,8 +382,8 @@ function createMonitorStore({ CONFIG, getSystemStats }) {
     const sessions = getAllSessions();
     const cronRuns = getCronRuns();
 
-    sessions.forEach(watchSession);
-    cronRuns.forEach(loadFile);
+    sessions.forEach(session => watchSession(session, { emit: false }));
+    cronRuns.forEach(cronRun => loadFile(cronRun, { emit: false }));
 
     if (sessions.length === 0 && cronRuns.length === 0) {
       console.log('[Agent-Monitor] No session files found, waiting...');
